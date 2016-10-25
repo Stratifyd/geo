@@ -243,16 +243,18 @@ class GeocodeResult(object):
         return r_get(url, **kwargs).content
 
     __slots__ = ('__ns', '__args', '__assoc', '__cache', '__cached', '__calls',
-                 '__query', '__result', 'arguments', 'exc', 'fxn', 'get_query')
+                 '__debug', '__query', '__result',
+                 'arguments', 'exc', 'fxn', 'get_query')
 
     def __init__(self, host, query, assoc, search_type=TYPICAL_GEOCODE_QUERY,
                  _fetch_function=default_fetch_function, _catch_exceptions=(),
                  **kwargs):
         self.__ns = host
         self.__args = None
-        self.__calls = 0
-        self.__cache = kwargs.pop('cache', None)
         self.__assoc = assoc
+        self.__cache = kwargs.pop('cache', None)
+        self.__calls = 0
+        self.__debug = ENV.get(ENV.VERBOSE, as_type=int) > 1
         if hasattr(_fetch_function, '__call__'):
             self.fxn = _fetch_function
         else:
@@ -318,6 +320,7 @@ class GeocodeResult(object):
 
                     try:
                         query = self.__ns + query + self.arguments
+                        print query
                         self.__calls += 1
                         body = "null"
                         body = self.fxn(query)
@@ -339,7 +342,7 @@ class GeocodeResult(object):
                             REQUEST_PERIOD = min(MAXIMUM_PERIOD,
                                                  REQUEST_PERIOD * 1.05)
                             wait = REQUEST_PERIOD * 10
-                            if ACTIVATE_DEBUG:
+                            if self.__debug:
                                 stdout.write(
                                     "\nDetected PostgreSQL database "
                                     "error. Sleeping for %.2f seconds."
@@ -351,13 +354,13 @@ class GeocodeResult(object):
                                 errors.add("DB Error")
                             sleep(wait)
                         elif "Internal Server Error" in body:
-                            if ACTIVATE_DEBUG:
+                            if self.__debug:
                                 stdout.write(
                                     "\nDetected Nominatim internal error."
                                     "\nBad Request: %s\n" % args)
                             sleep(REQUEST_PERIOD)
                         else:
-                            if ACTIVATE_DEBUG:
+                            if self.__debug:
                                 stdout.write(
                                     "\nEncountered unknown error.\n%s\n%s"
                                     "\nBad Request: %s\n"
@@ -380,7 +383,7 @@ class GeocodeResult(object):
                     mirror.add(args)
                 except:
                     self.__calls += 1
-                    if ACTIVATE_DEBUG:
+                    if self.__debug:
                         stdout.write("\nEncountered unknown global error!\n%s."
                                      % format_exc())
                     sleep(REQUEST_PERIOD)
@@ -424,7 +427,7 @@ class GeocodeResult(object):
 
         try:
             country_code, region_code = self.__assoc.codify(
-                latitude=latitude, longitude=longitude,
+                latitude=latitude, longitude=longitude, verbose=self.__debug,
                 country_strings=country_args, region_strings=region_args)
             country_code = country_code.upper()
             region_code = region_code.upper() if region_code else None
@@ -440,7 +443,7 @@ class GeocodeResult(object):
                         "region_name": REGION_MAPPING.get(
                             country_code, {}).get(region_code, None),
 
-                        "postal": dictionary.get("postcode", None)
+                        "postal": address.get("postcode", None)
                     }
                 }
             )
@@ -454,7 +457,7 @@ class GeocodeResult(object):
                         "region": None,
                         "region_name": None,
 
-                        "postal": dictionary.get("postcode", None)
+                        "postal": address.get("postcode", None)
                     },
                 }
             )
