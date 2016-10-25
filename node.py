@@ -1129,7 +1129,7 @@ class GeoLookup(ProcessNode):
         return JS.GEO_STATUS  # @UndefinedVariable
 
     @property
-    def iblock(self):
+    def node_blocks(self):
         return False
 
     def setup(self):
