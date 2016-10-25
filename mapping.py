@@ -83,9 +83,7 @@ except:
 
         def centroid(geo):
             lon, lat = shape(geo).centroid.xy
-            lat = lat[0][0]
-            lon = lon[0][0]
-            return lat, lon
+            return lat[0], lon[0]
     except:
         raise ImportError(
             u"GeoMapping object failed to instantiate;\nGDAL: %s\n\nShapely: %s"
