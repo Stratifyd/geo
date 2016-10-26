@@ -53,18 +53,15 @@ from v2_ta_common.process_node import ProcessNode
 from warnings import warn
 
 TCONFIGURATION = TasteConf()
-NOMINATIM_HOST = u'http://%s/nominatim/' % TCONFIGURATION.getNominatimHost()
-try:
-    MAXMIND_SOURCE = Reader(TCONFIGURATION.getMaxMindSource())
-except:
-    MAXMIND_SOURCE = None
+ACTIVATE_DEBUG = ENV.get(ENV.VERBOSE, as_type=int) > 1
 CACHE_SIZE_CAP = 1000000
 CACHE_SIZE_MIN = 10000
 CONCURRENT_MAX = 128
 INITIAL_PERIOD = 0.0
-REQUEST_PERIOD = INITIAL_PERIOD
 MAXIMUM_PERIOD = 3.0
-ACTIVATE_DEBUG = ENV.get(ENV.VERBOSE, as_type=int) > 1
+MAXMIND_SOURCE = Reader(TCONFIGURATION.getMaxMindSource())
+NOMINATIM_HOST = u'http://%s/nominatim/' % TCONFIGURATION.getNominatimHost()
+REQUEST_PERIOD = INITIAL_PERIOD
 
 
 def identity(obj):
@@ -189,7 +186,7 @@ class GeocodeResult(object):
                 if found:
                     break
 
-    def phone_number(self, query):
+    def phone_number(self, query, calls):
         try:
             numbers = self._yield_phone_matches(region=None, *query)
         except:
@@ -201,13 +198,14 @@ class GeocodeResult(object):
     # IP address lookup provided by an internal MaxMind database
     IP_ADDRESS_QUERY = "ip_address"
 
-    def ip_address(self, query):
+    def ip_address(self, query, calls):
         try:
             results = (self._safe(MAXMIND_SOURCE.city, result)
                        for result in query['ip_address'])
         except:
             results = ()
 
+        self.__result = []
         for result in results:
             if not isinstance(result, City):
                 continue
@@ -221,11 +219,12 @@ class GeocodeResult(object):
 
             city = getattr(city, 'name', '')
             country = getattr(getattr(result, 'country', None), 'name', '')
+            postal = getattr(getattr(result, 'postal', None), 'code', None)
             traits = getattr(result, 'traits', None)
             ip_address = getattr(traits, 'ip_address', query.get('ip_address'))
 
             self.__calls += 1
-            self.__result = {
+            self.__result.append({
                 "osm_id": _id,
                 "lat": lat,
                 "lon": lon,
@@ -233,11 +232,11 @@ class GeocodeResult(object):
                 "display_name": ip_address,
                 "address": {
                     "country": country,
-                    "city": city
+                    "city": city,
+                    "postcode": postal
                 }
-            }
-            return
-        self.__result = {}
+            })
+        return None, None
 
     @staticmethod
     def default_fetch_function(url, **kwargs):
@@ -312,7 +311,7 @@ class GeocodeResult(object):
                 try:
                     args, query = self.get_query(self.__query, self.__calls)
                     if args is None or query is None:
-                        self.__result = []
+                        self.__result = self.__result or []
                         break
                     if self.__cache and args in self.__cache:
                         self.__cached = True
@@ -373,12 +372,7 @@ class GeocodeResult(object):
 
                     if docs and args:
                         self.__args = args
-                        if not self.__cached:
-                            self.__result = map(self.__normalize, docs)
-                            if self.__cache:
-                                self.__cache[args] = self.__result
-                                for same in mirror:
-                                    self.__cache.register_alternate(args, same)
+                        self.__result = docs
                         break
                     mirror.add(args)
                 except:
@@ -387,6 +381,19 @@ class GeocodeResult(object):
                         stdout.write("\nEncountered unknown global error!\n%s."
                                      % format_exc())
                     sleep(REQUEST_PERIOD)
+
+        try:
+            if not self.__cached:
+                self.__result = map(self.__normalize, self.__result)
+                if self.__cache:
+                    self.__cache[args] = self.__result
+                    for same in mirror:
+                        self.__cache.register_alternate(args, same)
+        except:
+            if self.__debug:
+                stdout.write("\nEncountered issue with result normalization!"
+                             "\n%s" % format_exc())
+            self.__result = []
 
         if isinstance(self.__result, list) and len(self.__result) > 0:
             return self.__result
