@@ -563,7 +563,7 @@ class CentroidUpdateHelper(object):
 
         if verbose:
             runtime = time()
-            comparisons = 0
+        comparisons = 0
 
         if latitude is not None and longitude is not None:
             coord = (latitude, longitude)
@@ -579,27 +579,29 @@ class CentroidUpdateHelper(object):
                 country = self._country_geocode[ccode]
                 region = self._region_geocode[ccode][rcode] if rcode else None
 
-                comparisons += 1
-                if region and contains(region, point):
+                if region:
+                    comparisons += 1
+                    if contains(region, point):
+                        comparisons += 1
+                        if contains(country, point):
+                            country_code = ccode
+                            region_code = rcode
+                            if verbose:
+                                print u'GeoCode determined by intersection.'
+                                print u'Time: %f seconds.' % (time() - runtime)
+                                print u'Comp: %d polygons.' % comparisons
+                                print self.translate(country_code, region_code)
+                                print
+                            break
+                elif nnode is None:
                     comparisons += 1
                     if contains(country, point):
-                        country_code = ccode
-                        region_code = rcode
-                        if verbose:
-                            print u'GeoCode determined by intersection.'
-                            print u'Time: %f seconds.' % (time() - runtime)
-                            print u'Comp: %d polygons.' % comparisons
-                            print self.translate(country_code, region_code)
-                            print
-                        break
-                elif nnode is None and contains(country, point):
-                    comparisons += 1
-                    nnode = node
+                        nnode = node
 
                 if found > limit:
                     break
 
-            if country_code is None:
+            if country_code is None and nnode is not None:
                 country_code = nnode.ccode
                 region_code = nnode.rcode
                 if verbose:

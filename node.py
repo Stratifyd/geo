@@ -41,6 +41,7 @@ from requests.adapters import HTTPAdapter
 from requests.exceptions import ConnectionError, Timeout
 from sys import stdout, maxunicode
 from ta_common.field_names import DF, RO, MC, JS, ENV
+from ta_common.geo.centroid import countries, regions
 from ta_common.taste_config_helper import TasteConf
 from threading import Lock
 from time import time, sleep
@@ -320,7 +321,6 @@ class GeocodeResult(object):
 
                     try:
                         query = self.__ns + query + self.arguments
-                        print query
                         self.__calls += 1
                         body = "null"
                         body = self.fxn(query)
@@ -411,8 +411,6 @@ class GeocodeResult(object):
             longitude = float(dictionary["lon"])
             result.update(
                 {
-                    "lat": latitude,
-                    "lon": longitude,
                     "json": dictionary.get("geojson", {
                         "type": "Point",
                         "coordinates": [
@@ -432,10 +430,17 @@ class GeocodeResult(object):
             country_code = country_code.upper()
             region_code = region_code.upper() if region_code else None
             if any(country_args) and not any(region_args):
+                latitude, longitude = countries.get(
+                    country_code, (latitude, longitude))
                 region_code = None
+            else:
+                latitude, longitude = regions.get(country_code, {}).get(
+                    region_code, (latitude, longitude))
             result.update(
                 {
-                    'code': {
+                    "lat": latitude,
+                    "lon": longitude,
+                    "code": {
                         "country": country_code,
                         "country_name": COUNTRY_MAPPING.get(country_code, None),
 
@@ -450,7 +455,9 @@ class GeocodeResult(object):
         except:
             result.update(
                 {
-                    'code': {
+                    "lat": latitude,
+                    "lon": longitude,
+                    "code": {
                         "country": None,
                         "country_name": None,
 
