@@ -310,19 +310,10 @@ class CentroidUpdateHelper(object):
                 raise TypeError("rgeo.json.xz exists and is not a file!")
         Command('xz')('-z9', 'rgeo.json')
 
-        helper = CentroidUpdateHelper(
-            nominatim_host, _country_geocode=country, _region_geocode=regions)
-
-        def codify(geojson):
-            try:
-                return helper.codify(*centroid(geojson))
-            except:
-                return (None, None)
-
         phones = cls.regenerate_phone_geocode(nominatim_host, verbose)
         phones = {
             ccode: {
-                acode: map(codify, phones[ccode][acode])
+                acode: centroid(phones[ccode][acode])
                 for acode in phones[ccode]
             }
             for ccode in phones
@@ -435,6 +426,22 @@ class CentroidUpdateHelper(object):
             self._region_geocode = None
         rtime = time() - rtime
 
+        ptime = time()
+        if isinstance(_phone_geocode, dict):
+            self._phone_geocode = _phone_geocode
+        elif isinstance(_phone_geocode, basestring):
+            if _phone_geocode.endswith('xz'):
+                self._phone_geocode = loads(
+                    Command('xz')('-dc', _phone_geocode).stdout)
+            else:
+                with open(_phone_geocode, 'rb') as pin:
+                    self._phone_geocode = load(pin)
+        elif isinstance(_phone_geocode, Collection):
+            self._phone_geocode = self.pull_from_mongo(_phone_geocode)
+        else:
+            self._phone_geocode = None
+        ptime = time() - ptime
+
         if isinstance(_fuzzy_treshold, float) and 0.0 < _fuzzy_treshold < 1.0:
             self._fuzzy_treshold = _fuzzy_treshold
         else:
@@ -451,6 +458,7 @@ class CentroidUpdateHelper(object):
         if verbose:
             print 'Country Polygon Time: %f seconds' % ctime
             print 'Region  Polygon Time: %f seconds' % rtime
+            print 'Area Code Load  Time: %f seconds' % ptime
             print 'GeoTree Insert  Time: %f seconds' % gtime
 
     BASE_URL = '/search.php?country=%s'
@@ -524,7 +532,7 @@ class CentroidUpdateHelper(object):
         return country, region
 
     def codify(self, latitude=None, longitude=None, country_strings=(),
-               region_strings=(), verbose=False, limit=5, **ignored):
+               region_strings=(), verbose=False, limit=100, **ignored):
         try:
             latitude = float(latitude)
             assert(-90.0 <= latitude <= 90.0)

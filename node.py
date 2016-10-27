@@ -186,7 +186,7 @@ class GeocodeResult(object):
                 if found:
                     break
 
-    def phone_number(self, query, calls):
+    def phone_number(self, query, attempt=0):
         try:
             numbers = self._yield_phone_matches(region=None, *query)
         except:
@@ -198,7 +198,7 @@ class GeocodeResult(object):
     # IP address lookup provided by an internal MaxMind database
     IP_ADDRESS_QUERY = "ip_address"
 
-    def ip_address(self, query, calls):
+    def ip_address(self, query, attempt=0):
         try:
             results = (self._safe(MAXMIND_SOURCE.city, result)
                        for result in query['ip_address'])
@@ -582,6 +582,8 @@ class LockedIterator(object):
 class Nominatim(object):
 
     OPTION_PRIORITY_ORDER = (
+        ("phonenumber", GeocodeResult.PHONE_NUMBER_QUERY),
+        ("ip_address", GeocodeResult.IP_ADDRESS_QUERY),
         ("latitude_longitude", GeocodeResult.REVERSE_GEOCODE_QUERY),
         ("longitude_latitude", GeocodeResult.REVERSE_GEOCODE_QUERY),
         ("latitude", GeocodeResult.REVERSE_GEOCODE_QUERY),
@@ -590,8 +592,6 @@ class Nominatim(object):
         ("local", GeocodeResult.TYPICAL_GEOCODE_QUERY),
         ("sublocal", GeocodeResult.TYPICAL_GEOCODE_QUERY),
         ("postcode", GeocodeResult.TYPICAL_GEOCODE_QUERY),
-        ("ip_address", GeocodeResult.IP_ADDRESS_QUERY),
-        ("phonenumber", GeocodeResult.PHONE_NUMBER_QUERY),
     )
 
     LEGAL_CONFIGURATION_OPTIONS = tuple(
@@ -617,7 +617,8 @@ class Nominatim(object):
 
         if country_geocode and region_geocode:
             configuration = {'_country_geocode': country_geocode,
-                             '_region_geocode': region_geocode}
+                             '_region_geocode': region_geocode,
+                             'verbose': ACTIVATE_DEBUG}
             if phone_geocode:
                 configuration['_phone_geocode'] = phone_geocode
             kwargs.update(configuration)
@@ -708,10 +709,11 @@ class Nominatim(object):
 
     def _ip_address(self, information):
         try:
-            addresses = filter(None, sum(
-                [self.IA.split(ia) for ia in information['ip_address']], []))
+            addresses = filter(
+                None, sum([self.IA.split(ia)
+                           for ia in information['ip_address'].split()], []))
             return {'ip_address': addresses,
-                    'orig': ', '.join(addresses)}
+                    'orig': ' / '.join(addresses)}
         except:
             return None
 
@@ -1217,14 +1219,14 @@ if __name__ == '__main__':
                 continue
             examples.append({"i": query, "t": type_, "r": {}})
             for attempt in range(5):
-                _args, param = getattr(GeocodeResult, type_)(
+                geocode = nominatim.get_geocode_result(type_, query)
+                _args, param = getattr(geocode, type_)(
                     query=query, attempt=attempt)
                 if param:
                     examples[-1][str(attempt)] = NOMINATIM_HOST + param
                 else:
-                    break
-                examples[-1]["r"][str(attempt)] = nominatim.get_geocode_result(
-                    type_, query).result
+                    examples[-1][str(attempt)] = None
+                examples[-1]["r"][str(attempt)] = geocode.result
 
         return examples
 
@@ -1256,11 +1258,8 @@ if __name__ == '__main__':
         print job.to_json(for_aws=True)
 
     if 'm' in run_type or 'e' in run_type or 'r' in run_type:
-        nom = Nominatim(
-            client=grove,
-            _country_geocode=TCONFIGURATION.getNominatimCountryGeoJSON(),
-            _region_geocode=TCONFIGURATION.getNominatimRegionGeoJSON()
-        )
+        nom = Nominatim.spawn_for_local(
+            client=grove, nominatim_host=NOMINATIM_HOST)
         if 'm' in run_type:  # print job conf's mapping
             print "Mapping:"
             pprint(get_mapping(nom, job, grove))
