@@ -448,11 +448,12 @@ class CentroidUpdateHelper(object):
             self._fuzzy_treshold = 0.7
 
         gtime = time()
-        self.__geo_tree = GeoTree()
-        for ccode in self._country_geocode.iterkeys():
-            for rcode, rpoly in self._region_geocode[ccode].iteritems():
-                self.__geo_tree.insert(
-                    *centroid(rpoly), ccode=ccode, rcode=rcode)
+        if self._country_geocode and self._region_geocode:
+            self.__geo_tree = GeoTree()
+            for ccode in self._country_geocode.iterkeys():
+                for rcode, rpoly in self._region_geocode[ccode].iteritems():
+                    self.__geo_tree.insert(
+                        *centroid(rpoly), ccode=ccode, rcode=rcode)
         gtime = time() - gtime
 
         if verbose:

@@ -32,7 +32,7 @@ from mapping import CentroidUpdateHelper, COUNTRY_MAPPING, REGION_MAPPING
 from multiprocessing.pool import ThreadPool
 from os import walk
 from os.path import join
-from phonenumbers import parse, PhoneNumberMatcher, SUPPORTED_REGIONS
+from phonenumbers import format_number, PhoneNumberMatcher, PhoneNumberFormat
 from pymongo import MongoClient, DESCENDING
 from pymongo.cursor import CursorType
 from regex import compile as regex_compile, UNICODE as regex_U
@@ -42,6 +42,7 @@ from requests.exceptions import ConnectionError, Timeout
 from sys import stdout, maxunicode
 from ta_common.field_names import DF, RO, MC, JS, ENV
 from ta_common.geo.centroid import countries, regions
+from ta_common.geo.mapping import area_codes
 from ta_common.taste_config_helper import TasteConf
 from threading import Lock
 from time import time, sleep
@@ -170,30 +171,46 @@ class GeocodeResult(object):
     PHONE_NUMBER_QUERY = "phone_number"
 
     @staticmethod
-    def _yield_phone_matches(region=None, *inputs):
-        region = region if region in SUPPORTED_REGIONS else None
-        for string in inputs:
+    def _yield_phone_matches(query, region=None):
+        for string in query:
             if not isinstance(string, basestring):
                 continue
             found = False
             for guess in (region, "US", "CN", "RU"):
                 try:
                     for match in PhoneNumberMatcher(string, region=guess):
-                        yield (match.country_code, match.national_number)
+                        yield match
                         found = True
                 except:
+                    print format_exc()
                     pass
                 if found:
                     break
 
     def phone_number(self, query, attempt=0):
         try:
-            numbers = self._yield_phone_matches(region=None, *query)
+            numbers = self._yield_phone_matches(query[self.PHONE_NUMBER_QUERY])
         except:
+            print format_exc()
             numbers = ()
 
+        self.__result = []
         for number in numbers:
-            pass
+            try:
+                latitude, longitude, country, city = area_codes.get(
+                    number.country_code, {}).get(number.national_number)
+            except:
+                continue
+            self.__result.append({
+                "lat": latitude,
+                "lon": longitude,
+                "display_name": format_number(number, PhoneNumberFormat.E164),
+                "address": {
+                    "country": country,
+                    "city": city
+                }
+            })
+        return None, None
 
     # IP address lookup provided by an internal MaxMind database
     IP_ADDRESS_QUERY = "ip_address"
@@ -201,7 +218,7 @@ class GeocodeResult(object):
     def ip_address(self, query, attempt=0):
         try:
             results = (self._safe(MAXMIND_SOURCE.city, result)
-                       for result in query['ip_address'])
+                       for result in query[self.IP_ADDRESS_QUERY])
         except:
             results = ()
 
@@ -719,8 +736,7 @@ class Nominatim(object):
 
     def _phonenumber(self, information):
         try:
-            raise NotImplementedError
-            return {'phone_number': information['phone_number']}
+            return {'phone_number': information['phone_number'].split()}
         except:
             return None
 
