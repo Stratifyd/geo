@@ -37,7 +37,7 @@ from sh import Command
 from ta_common.field_names import RO, MC
 from ta_common.geo.mapping import (countries as COUNTRY_MAPPING,
                                    regions as REGION_MAPPING,
-                                   area_codes as PHONE_MAPPING)
+                                   phone_codes as PHONE_MAPPING)
 from ta_common.mango.relational_object import mutabledotdict
 from time import time
 from traceback import format_exc
@@ -82,8 +82,7 @@ except:
             return mapping(geo)
 
         def centroid(geo):
-            lon, lat = shape(geo).centroid.xy
-            return lat[0], lon[0]
+            return shape(geo).centroid.coords[0][::-1]
     except:
         raise ImportError(
             u"GeoMapping object failed to instantiate;\nGDAL: %s\n\nShapely: %s"
@@ -267,12 +266,13 @@ class CentroidUpdateHelper(object):
 
     @classmethod
     def generate_full_geocode_set(cls, nominatim_host, verbose=False):
-        from shapely.geometry import shape, mapping
+        from shapely.geometry import shape as Shape, mapping as Mapping
+        from shapely.ops import cascaded_union
 
         country = cls.regenerate_country_geocode(nominatim_host, verbose)
         country = {
             code: {
-                'geojson': mapping(shape(geo['geojson']).simplify(0.001)),
+                'geojson': Mapping(Shape(geo['geojson']).simplify(0.001)),
                 'display_name': geo['display_name'],
                 'namedetails': geo.get('namedetails', {})
             }
@@ -292,7 +292,7 @@ class CentroidUpdateHelper(object):
         regions = {
             ccode: {
                 rcode: {
-                    'geojson': mapping(shape(geo['geojson']).simplify(0.002)),
+                    'geojson': Mapping(Shape(geo['geojson']).simplify(0.002)),
                     'display_name': geo['display_name'],
                     'namedetails': geo.get('namedetails', {})
                 }
@@ -313,7 +313,8 @@ class CentroidUpdateHelper(object):
         phones = cls.regenerate_phone_geocode(nominatim_host, verbose)
         phones = {
             ccode: {
-                acode: centroid(phones[ccode][acode])
+                acode: cascaded_union(map(Shape, phones[ccode][acode])
+                                      ).centroid.coords[0][::-1]
                 for acode in phones[ccode]
             }
             for ccode in phones

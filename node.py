@@ -23,12 +23,13 @@
 """
 
 from cPickle import dumps as dump_obj, loads as load_obj
-from collections import deque, Container, Mapping, OrderedDict
+from collections import deque, Container, Counter, Mapping, OrderedDict
 from geoip2.database import Reader
 from geoip2.models import City
 from jieba import cut as jieba_cut
 from json import loads
 from mapping import CentroidUpdateHelper, COUNTRY_MAPPING, REGION_MAPPING
+from math import log10
 from multiprocessing.pool import ThreadPool
 from os import walk
 from os.path import join
@@ -41,8 +42,8 @@ from requests.adapters import HTTPAdapter
 from requests.exceptions import ConnectionError, Timeout
 from sys import stdout, maxunicode
 from ta_common.field_names import DF, RO, MC, JS, ENV
-from ta_common.geo.centroid import countries, regions
-from ta_common.geo.mapping import area_codes
+from ta_common.geo.centroid import countries, regions, phones
+from ta_common.geo.mapping import phone_codes
 from ta_common.taste_config_helper import TasteConf
 from threading import Lock
 from time import time, sleep
@@ -179,10 +180,9 @@ class GeocodeResult(object):
             for guess in (region, "US", "CN", "RU"):
                 try:
                     for match in PhoneNumberMatcher(string, region=guess):
-                        yield match
+                        yield match.number
                         found = True
                 except:
-                    print format_exc()
                     pass
                 if found:
                     break
@@ -191,19 +191,40 @@ class GeocodeResult(object):
         try:
             numbers = self._yield_phone_matches(query[self.PHONE_NUMBER_QUERY])
         except:
-            print format_exc()
             numbers = ()
 
         self.__result = []
         for number in numbers:
             try:
-                latitude, longitude, country, city = area_codes.get(
-                    number.country_code, {}).get(number.national_number)
+                code = int(number.country_code)
+                area_str = str(number.national_number)
+
+                areas = phones[code]
+                min_area = int(log10(min(filter(None, areas))) + 1)
+                max_area = int(log10(max(filter(None, areas))) + 2)
+
+                area = None
+                for idx in xrange(min_area, max_area):
+                    area = int(area_str[:idx])
+                    if area in areas:
+                        break
+                    area = None
+
+                lat, lon = areas[area]
+                loc = phone_codes[code][area]
             except:
                 continue
+            try:
+                if len(loc) > 1:
+                    country = Counter(l[0] for l in loc).most_common(1)[0][0]
+                    city = ''
+                else:
+                    country, city = loc[0]
+            except:
+                country, city = '', ''
             self.__result.append({
-                "lat": latitude,
-                "lon": longitude,
+                "lat": lat,
+                "lon": lon,
                 "display_name": format_number(number, PhoneNumberFormat.E164),
                 "address": {
                     "country": country,
