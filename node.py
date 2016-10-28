@@ -85,6 +85,7 @@ class GeocodeResult(object):
     COUNTRY_KEYS = ("country", "continent")
     REGION_KEYS = ("state", "city", "town", "county",
                    "state_district", "village", "suburb")
+
     MAXIMUM_ATTEMPTS = 5
 
     # The following rely on Nominatim queries
@@ -368,7 +369,7 @@ class GeocodeResult(object):
     def cache_key(self):
         if self.__result is None:
             self.result
-        return self.__args
+        return self.__key
 
     @property
     def result(self):
@@ -497,6 +498,7 @@ class GeocodeResult(object):
             country_code, region_code = self.__assoc.codify(
                 latitude=latitude, longitude=longitude, verbose=CODIFY_VERBOSE,
                 country_strings=country_args, region_strings=region_args)
+
             country_code = country_code.upper()
             region_code = region_code.upper() if region_code else None
             if any(country_args) and not any(region_args):
@@ -506,6 +508,7 @@ class GeocodeResult(object):
             else:
                 latitude, longitude = regions.get(country_code, {}).get(
                     region_code, (latitude, longitude))
+
             result.update(
                 {
                     "lat": latitude,
@@ -645,7 +648,7 @@ class LockedIterator(object):
 class Nominatim(object):
 
     OPTION_PRIORITY_ORDER = (
-        ("phonenumber", GeocodeResult.PHONE_NUMBER_QUERY),
+        ("phone_number", GeocodeResult.PHONE_NUMBER_QUERY),
         ("ip_address", GeocodeResult.IP_ADDRESS_QUERY),
         ("latitude_longitude", GeocodeResult.REVERSE_GEOCODE_QUERY),
         ("longitude_latitude", GeocodeResult.REVERSE_GEOCODE_QUERY),
@@ -780,7 +783,7 @@ class Nominatim(object):
         except:
             return None
 
-    def _phonenumber(self, information):
+    def _phone_number(self, information):
         try:
             return {'phone_number': information['phone_number'].split()}
         except:
@@ -1101,18 +1104,18 @@ class Nominatim(object):
                     self.__used.add(geocode.cache_key)
                 else:
                     result = {}
+
+                if result.get('full'):
+                    self.CODE += 1
+
+                if result.get('code', {}).get('country'):
+                    self.FUZZ += 1
+                else:
+                    self.NULL += 1
+
                 result['orig'] = query.get('orig', '')
             else:
                 result = {}
-
-            if result.get('full'):
-                self.CODE += 1
-
-            if (result.get('code', {}).get('region') or
-                    result.get('code', {}).get('country')):
-                self.FUZZ += 1
-            else:
-                self.NULL += 1
 
             return _id, result
         except:
@@ -1282,10 +1285,11 @@ if __name__ == '__main__':
             examples.append({"i": query, "t": type_, "r": {}})
             for attempt in range(5):
                 geocode = nominatim.get_geocode_result(type_, query)
-                _args, param = getattr(geocode, type_)(
+                query = getattr(geocode, "get_%s" % type_)(
                     query=query, attempt=attempt)
-                if param:
-                    examples[-1][str(attempt)] = NOMINATIM_HOST + param
+                if query:
+                    examples[-1][str(attempt)] = getattr(
+                        geocode, "res_%s" % type_)(query, set())
                 else:
                     examples[-1][str(attempt)] = None
                 examples[-1]["r"][str(attempt)] = geocode.result
