@@ -33,7 +33,7 @@ from math import log10
 from multiprocessing.pool import ThreadPool
 from os import walk
 from os.path import join
-from phonenumbers import format_number, PhoneNumberMatcher, PhoneNumberFormat
+from phonenumbers import format_number, PhoneNumber, PhoneNumberMatcher
 from pymongo import MongoClient, DESCENDING
 from pymongo.cursor import CursorType
 from regex import compile as regex_compile, UNICODE as regex_U
@@ -58,6 +58,7 @@ TCONFIGURATION = TasteConf()
 ACTIVATE_DEBUG = ENV.get(ENV.VERBOSE, as_type=int) > 1
 CACHE_SIZE_CAP = 1000000
 CACHE_SIZE_MIN = 10000
+CODIFY_VERBOSE = ENV.get(ENV.VERBOSE, as_type=int) > 2
 CONCURRENT_MAX = 128
 INITIAL_PERIOD = 0.0
 MAXIMUM_PERIOD = 3.0
@@ -115,7 +116,7 @@ class GeocodeResult(object):
                               'city', 'street', 'postalcode')
 
     @classmethod
-    def geocode(cls, query, attempt=0, juggle=False):
+    def get_geocode(cls, query, attempt=0, juggle=False):
         params = {field: query[field] for field in cls.CONSIDERATION_PRIORITY
                   if field in query and query[field]}
         if params:
@@ -156,143 +157,176 @@ class GeocodeResult(object):
             split_input = cls.ATTEMPT_GEOCODE_ADJUST.split(query_input)[cut]
 
         if split_input:
-            urlargs = gen_cache_key({"q": u' '.join(split_input).rstrip(u',')})
-            return urlargs, cls.TYPICAL_GEOCODE_SCRIPT + urlargs
+            return {"q": u' '.join(split_input).rstrip(u',')}
         else:
-            return None, None
-
-    @staticmethod
-    def _safe(function, *args, **kwargs):
-        try:
-            return function(*args, **kwargs)
-        except:
             return None
+
+    def res_geocode(self, query, errors):
+        args = gen_cache_key(query)
+        body = self.fxn(self.__ns +
+                        self.TYPICAL_GEOCODE_SCRIPT +
+                        args +
+                        self.arguments)
+        try:
+            return loads(body.strip())
+        except:
+            if "DB Error" in body:
+                self.__calls -= 1
+                wait = REQUEST_PERIOD * 10
+                if self.__debug:
+                    stdout.write(
+                        "\nDetected PostgreSQL database "
+                        "error. Sleeping for %.2f seconds."
+                        "\nBad Request: %s\n" % (wait, args))
+                if "DB Error" in errors:
+                    self.__calls += 1
+                    errors.remove("DB Error")
+                else:
+                    errors.add("DB Error")
+                sleep(wait)
+            elif "Internal Server Error" in body:
+                if self.__debug:
+                    stdout.write(
+                        "\nDetected Nominatim internal error."
+                        "\nBad Request: %s\n" % args)
+                sleep(REQUEST_PERIOD)
+            else:
+                if self.__debug:
+                    stdout.write(
+                        "\nEncountered unknown error.\n%s\n%s"
+                        "\nBad Request: %s\n"
+                        % (body, format_exc(), args))
+                sleep(REQUEST_PERIOD)
+            raise
 
     # Phone number lookup currently provided by ad-hoc area code guesswork
     PHONE_NUMBER_QUERY = "phone_number"
 
     @staticmethod
-    def _yield_phone_matches(query, region=None):
-        for string in query:
-            if not isinstance(string, basestring):
-                continue
-            found = False
-            for guess in (region, "US", "CN", "RU"):
-                try:
-                    for match in PhoneNumberMatcher(string, region=guess):
-                        yield match.number
-                        found = True
-                except:
-                    pass
-                if found:
-                    break
+    def _phone_numbers(query, region=None):
+        if not isinstance(query, basestring):
+            raise StopIteration
+        found = False
+        for guess in (region, "US", "CN", "RU"):
+            try:
+                for match in PhoneNumberMatcher(query, region=guess):
+                    yield format_number(match.number, 1)
+                    found = True
+            except:
+                pass
+            if found:
+                break
 
-    def phone_number(self, query, attempt=0):
+    def get_phone_number(self, query, attempt=0):
+        if not hasattr(self, '_numbers'):
+            self._numbers = self._phone_numbers(query[self.PHONE_NUMBER_QUERY])
+            self._matched = []
+
+        while attempt >= len(self._matched):
+            try:
+                self._matched.append(self._numbers.next())
+            except StopIteration:
+                self._matched.append(None)
+
         try:
-            numbers = self._yield_phone_matches(query[self.PHONE_NUMBER_QUERY])
+            return self._matched[attempt]
         except:
-            numbers = ()
+            return None
 
-        self.__result = []
-        for number in numbers:
-            try:
-                code = int(number.country_code)
-                area_str = str(number.national_number)
+    def res_phone_number(self, query, errors):
+        code, area_str = query.split()
+        code = int(code.lstrip('+'))
 
-                areas = phones[code]
-                min_area = int(log10(min(filter(None, areas))) + 1)
-                max_area = int(log10(max(filter(None, areas))) + 2)
+        areas = phones[code]
+        min_area = int(log10(min(filter(None, areas))) + 1)
+        max_area = int(log10(max(filter(None, areas))) + 2)
 
-                area = None
-                for idx in xrange(min_area, max_area):
-                    area = int(area_str[:idx])
-                    if area in areas:
-                        break
-                    area = None
+        area = None
+        for idx in xrange(min_area, max_area):
+            area = int(area_str[:idx])
+            if area in areas:
+                break
+            area = None
 
-                lat, lon = areas[area]
-                loc = phone_codes[code][area]
-            except:
-                continue
-            try:
-                if len(loc) > 1:
-                    country = Counter(l[0] for l in loc).most_common(1)[0][0]
-                    city = ''
-                else:
-                    country, city = loc[0]
-            except:
-                country, city = '', ''
-            self.__result.append({
-                "lat": lat,
-                "lon": lon,
-                "display_name": format_number(number, PhoneNumberFormat.E164),
-                "address": {
-                    "country": country,
-                    "city": city
-                }
-            })
-        return None, None
+        lat, lon = areas[area]
+        loc = phone_codes[code][area]
+
+        try:
+            if len(loc) > 1:
+                country = Counter(l[0] for l in loc).most_common(1)[0][0]
+                city = ''
+            else:
+                country, city = loc[0]
+        except:
+            country, city = '', ''
+
+        return {
+            "lat": lat,
+            "lon": lon,
+            "display_name": query,
+            "address": {
+                "country": country,
+                "city": city
+            }
+        }
 
     # IP address lookup provided by an internal MaxMind database
     IP_ADDRESS_QUERY = "ip_address"
 
-    def ip_address(self, query, attempt=0):
+    def get_ip_address(self, query, attempt=0):
         try:
-            results = (self._safe(MAXMIND_SOURCE.city, result)
-                       for result in query[self.IP_ADDRESS_QUERY])
+            return query[self.IP_ADDRESS_QUERY][attempt]
         except:
-            results = ()
+            return None
 
-        self.__result = []
-        for result in results:
+    def res_ip_address(self, query, errors):
+        try:
+            result = MAXMIND_SOURCE.city(query)
             if not isinstance(result, City):
-                continue
-            city = getattr(result, 'city', None)
-            _id = getattr(city, 'geoname_id', -1)
+                return None
+        except:
+            return None
 
-            loc = getattr(result, 'location', None)
-            lat = getattr(loc, 'latitude', None)
-            lon = getattr(loc, 'longitude', None)
-            post = getattr(loc, 'postal_code', None)
+        city = getattr(result, 'city', None)
+        _id = getattr(city, 'geoname_id', -1)
 
-            city = getattr(city, 'name', '')
-            country = getattr(getattr(result, 'country', None), 'name', '')
-            postal = getattr(getattr(result, 'postal', None), 'code', None)
-            traits = getattr(result, 'traits', None)
-            ip_address = getattr(traits, 'ip_address', query.get('ip_address'))
+        loc = getattr(result, 'location', None)
+        lat = getattr(loc, 'latitude', None)
+        lon = getattr(loc, 'longitude', None)
+        post = getattr(loc, 'postal_code', None)
 
-            self.__calls += 1
-            self.__result.append({
-                "osm_id": _id,
-                "lat": lat,
-                "lon": lon,
-                "postcode": post,
-                "display_name": ip_address,
-                "address": {
-                    "country": country,
-                    "city": city,
-                    "postcode": postal
-                }
-            })
-        return None, None
+        city = getattr(city, 'name', '')
+        country = getattr(getattr(result, 'country', None), 'name', '')
+        postal = getattr(getattr(result, 'postal', None), 'code', None)
+        traits = getattr(result, 'traits', None)
+        ip_address = getattr(traits, 'ip_address', query)
+
+        return {
+            "osm_id": _id,
+            "lat": lat,
+            "lon": lon,
+            "postcode": post,
+            "display_name": ip_address,
+            "address": {
+                "country": country,
+                "city": city,
+                "postcode": postal
+            }
+        }
 
     @staticmethod
     def default_fetch_function(url, **kwargs):
         return r_get(url, **kwargs).content
 
-    __slots__ = ('__ns', '__args', '__assoc', '__cache', '__cached', '__calls',
-                 '__debug', '__query', '__result',
-                 'arguments', 'exc', 'fxn', 'get_query')
-
     def __init__(self, host, query, assoc, search_type=TYPICAL_GEOCODE_QUERY,
                  _fetch_function=default_fetch_function, _catch_exceptions=(),
                  **kwargs):
         self.__ns = host
-        self.__args = None
+        self.__key = None
+        self.__type = search_type
         self.__assoc = assoc
         self.__cache = kwargs.pop('cache', None)
         self.__calls = 0
-        self.__debug = ENV.get(ENV.VERBOSE, as_type=int) > 1
         if hasattr(_fetch_function, '__call__'):
             self.fxn = _fetch_function
         else:
@@ -304,7 +338,8 @@ class GeocodeResult(object):
         else:
             self.exc = tuple()
         self.__query = query
-        self.get_query = getattr(self, search_type)
+        self.get_query = getattr(self, 'get_%s' % self.__type)
+        self.res_query = getattr(self, 'res_%s' % self.__type)
         self.arguments = self.STANDARD_ARGUMENTS
 
         self.__cached = False
@@ -337,7 +372,7 @@ class GeocodeResult(object):
 
     @property
     def result(self):
-        args = ''
+        key = ''
         errors = set()
         mirror = set()
 
@@ -347,76 +382,66 @@ class GeocodeResult(object):
             while not self.__result and self.__calls < self.MAXIMUM_ATTEMPTS:
                 global REQUEST_PERIOD
                 try:
-                    args, query = self.get_query(self.__query, self.__calls)
-                    if args is None or query is None:
-                        self.__result = self.__result or []
-                        break
-                    if self.__cache and args in self.__cache:
-                        self.__cached = True
-                        self.__result = self.__cache[args]
+                    query = self.get_query(self.__query, self.__calls)
+                    if query is None:
+                        self.__result = []
                         break
 
+                    if self.__cache:
+                        if isinstance(query, dict):
+                            key = gen_cache_key(query)
+                        else:
+                            key = gen_cache_key({self.__type: query})
+                        if key in self.__cache:
+                            if ACTIVATE_DEBUG:
+                                stdout.write("Query #%d: '%s' (Cached)\n"
+                                             % (self.__calls + 1, query))
+                            self.__cached = True
+                            self.__result = self.__cache[key]
+                            break
+
+                    if ACTIVATE_DEBUG:
+                        stdout.write("Query #%d: '%s'\n"
+                                     % (self.__calls + 1, query))
+
                     try:
-                        query = self.__ns + query + self.arguments
                         self.__calls += 1
-                        body = "null"
-                        body = self.fxn(query)
-                        docs = loads(body.strip())
+                        docs = self.res_query(query, errors)
                         REQUEST_PERIOD = max(INITIAL_PERIOD,
                                              REQUEST_PERIOD * 0.99)
                     except self.exc as err:
                         self.__calls -= 1
-                        docs = []
+                        docs = None
                         if type(err) in errors:
                             self.__calls += 1
                             errors.remove(type(err))
                         else:
                             errors.add(type(err))
+                        if ACTIVATE_DEBUG:
+                            stdout.write("\nEncountered expected %s error!\n%s"
+                                         % (self.__type, format_exc()))
                         sleep(REQUEST_PERIOD)
                     except:
-                        if "DB Error" in body:
-                            self.__calls -= 1
-                            REQUEST_PERIOD = min(MAXIMUM_PERIOD,
-                                                 REQUEST_PERIOD * 1.05)
-                            wait = REQUEST_PERIOD * 10
-                            if self.__debug:
-                                stdout.write(
-                                    "\nDetected PostgreSQL database "
-                                    "error. Sleeping for %.2f seconds."
-                                    "\nBad Request: %s\n" % (wait, args))
-                            if "DB Error" in errors:
-                                self.__calls += 1
-                                errors.remove("DB Error")
-                            else:
-                                errors.add("DB Error")
-                            sleep(wait)
-                        elif "Internal Server Error" in body:
-                            if self.__debug:
-                                stdout.write(
-                                    "\nDetected Nominatim internal error."
-                                    "\nBad Request: %s\n" % args)
-                            sleep(REQUEST_PERIOD)
-                        else:
-                            if self.__debug:
-                                stdout.write(
-                                    "\nEncountered unknown error.\n%s\n%s"
-                                    "\nBad Request: %s\n"
-                                    % (body, format_exc(), args))
-                            sleep(REQUEST_PERIOD)
-                        docs = []
-
-                    if not isinstance(docs, list):
-                        docs = [docs]
-
-                    if docs and args:
-                        self.__args = args
+                        REQUEST_PERIOD = min(MAXIMUM_PERIOD,
+                                             REQUEST_PERIOD * 1.05)
+                        if ACTIVATE_DEBUG:
+                            stdout.write("\nEncountered unknown %s error!\n%s"
+                                         % (self.__type, format_exc()))
+                        docs = None
+                    if docs:
+                        if not isinstance(docs, list):
+                            docs = [docs]
+                        if self.__cache and key:
+                            self.__key = key
                         self.__result = docs
                         break
-                    mirror.add(args)
+                    else:
+                        if self.__cache:
+                            mirror.add(key)
                 except:
                     self.__calls += 1
-                    if self.__debug:
-                        stdout.write("\nEncountered unknown global error!\n%s."
+                    if ACTIVATE_DEBUG:
+                        stdout.write("\nEncountered unknown global error!\n%s"
                                      % format_exc())
                     sleep(REQUEST_PERIOD)
 
@@ -424,11 +449,11 @@ class GeocodeResult(object):
             if not self.__cached:
                 self.__result = map(self.__normalize, self.__result)
                 if self.__cache:
-                    self.__cache[args] = self.__result
-                    for same in mirror:
-                        self.__cache.register_alternate(args, same)
+                    self.__cache[key] = self.__result
+                    for alt in mirror:
+                        self.__cache.register_alternate(key, alt)
         except:
-            if self.__debug:
+            if ACTIVATE_DEBUG:
                 stdout.write("\nEncountered issue with result normalization!"
                              "\n%s" % format_exc())
             self.__result = []
@@ -470,7 +495,7 @@ class GeocodeResult(object):
 
         try:
             country_code, region_code = self.__assoc.codify(
-                latitude=latitude, longitude=longitude, verbose=self.__debug,
+                latitude=latitude, longitude=longitude, verbose=CODIFY_VERBOSE,
                 country_strings=country_args, region_strings=region_args)
             country_code = country_code.upper()
             region_code = region_code.upper() if region_code else None
@@ -656,7 +681,7 @@ class Nominatim(object):
         if country_geocode and region_geocode:
             configuration = {'_country_geocode': country_geocode,
                              '_region_geocode': region_geocode,
-                             'verbose': ACTIVATE_DEBUG}
+                             'verbose': CODIFY_VERBOSE}
             if phone_geocode:
                 configuration['_phone_geocode'] = phone_geocode
             kwargs.update(configuration)
