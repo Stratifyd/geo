@@ -1285,7 +1285,7 @@ if __name__ == '__main__':
             type_, query = nominatim.remap_documents(doc, mapping)
             if not query:
                 continue
-            examples.append({"i": query, "t": type_, "r": {}})
+            examples.append({"i": query, "t": type_, "r": {"_id": doc["_id"]}})
             for attempt in range(5):
                 geocode = nominatim.get_geocode_result(type_, query)
                 query = getattr(geocode, "get_%s" % type_)(
