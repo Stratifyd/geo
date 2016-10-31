@@ -97,24 +97,46 @@ class GeocodeResult(object):
     STANDARD_KWARGUMENTS = {
         "limit": lambda limit: "&limit={limit:d}" % min(max(int(limit), 1), 15)
     }
-    REVERSE_GEOCODE_QUERY = "reverse"
-    REVERSE_GEOCODE_SCRIPT = "reverse.php?"
-
-    @classmethod
-    def reverse(cls, query, attempt=0):
-        # For an explanation of recorded accuracy see:
-        # https://en.wikipedia.org/wiki/Decimal_degrees#Precision
-        if attempt == 0:
-            urlargs = gen_cache_key({"lat": query["lat"], "lon": query["lon"]})
-            return urlargs, cls.REVERSE_GEOCODE_SCRIPT + urlargs
-        else:
-            return None, None
 
     TYPICAL_GEOCODE_QUERY = "geocode"
     TYPICAL_GEOCODE_SCRIPT = "search.php?"
     ATTEMPT_GEOCODE_ADJUST = regex_compile(r'[^\p{L}\p{N}\p{M},]', regex_U)
     CONSIDERATION_PRIORITY = ('country', 'state', 'county',
                               'city', 'street', 'postalcode')
+
+    def run_geocode(self, query, errors):
+        body = self.fxn(self.__ns + query + self.arguments)
+        try:
+            return loads(body.strip())
+        except:
+            if "DB Error" in body:
+                self.__calls -= 1
+                wait = REQUEST_PERIOD * 10
+                if self.__debug:
+                    stdout.write(
+                        "\nDetected PostgreSQL database "
+                        "error. Sleeping for %.2f seconds."
+                        "\nBad Request: %s\n" % (wait, query))
+                if "DB Error" in errors:
+                    self.__calls += 1
+                    errors.remove("DB Error")
+                else:
+                    errors.add("DB Error")
+                sleep(wait)
+            elif "Internal Server Error" in body:
+                if self.__debug:
+                    stdout.write(
+                        "\nDetected Nominatim internal error."
+                        "\nBad Request: %s\n" % query)
+                sleep(REQUEST_PERIOD)
+            else:
+                if self.__debug:
+                    stdout.write(
+                        "\nEncountered unknown error.\n%s\n%s"
+                        "\nBad Request: %s\n"
+                        % (body, format_exc(), query))
+                sleep(REQUEST_PERIOD)
+            raise
 
     @classmethod
     def get_geocode(cls, query, attempt=0, juggle=False):
@@ -129,8 +151,7 @@ class GeocodeResult(object):
                         attempt -= 1
                 else:
                     if params:
-                        urlargs = gen_cache_key(params)
-                        return urlargs, cls.TYPICAL_GEOCODE_SCRIPT + urlargs
+                        return params
                     else:
                         break
 
@@ -163,42 +184,24 @@ class GeocodeResult(object):
             return None
 
     def res_geocode(self, query, errors):
-        args = gen_cache_key(query)
-        body = self.fxn(self.__ns +
-                        self.TYPICAL_GEOCODE_SCRIPT +
-                        args +
-                        self.arguments)
-        try:
-            return loads(body.strip())
-        except:
-            if "DB Error" in body:
-                self.__calls -= 1
-                wait = REQUEST_PERIOD * 10
-                if self.__debug:
-                    stdout.write(
-                        "\nDetected PostgreSQL database "
-                        "error. Sleeping for %.2f seconds."
-                        "\nBad Request: %s\n" % (wait, args))
-                if "DB Error" in errors:
-                    self.__calls += 1
-                    errors.remove("DB Error")
-                else:
-                    errors.add("DB Error")
-                sleep(wait)
-            elif "Internal Server Error" in body:
-                if self.__debug:
-                    stdout.write(
-                        "\nDetected Nominatim internal error."
-                        "\nBad Request: %s\n" % args)
-                sleep(REQUEST_PERIOD)
-            else:
-                if self.__debug:
-                    stdout.write(
-                        "\nEncountered unknown error.\n%s\n%s"
-                        "\nBad Request: %s\n"
-                        % (body, format_exc(), args))
-                sleep(REQUEST_PERIOD)
-            raise
+        return self.run_geocode(
+            self.TYPICAL_GEOCODE_SCRIPT + gen_cache_key(query), errors)
+
+    REVERSE_GEOCODE_QUERY = "reverse"
+    REVERSE_GEOCODE_SCRIPT = "reverse.php?"
+
+    @classmethod
+    def get_reverse(cls, query, attempt=0):
+        # For an explanation of recorded accuracy see:
+        # https://en.wikipedia.org/wiki/Decimal_degrees#Precision
+        if attempt == 0:
+            return {"lat": query["lat"], "lon": query["lon"]}
+        else:
+            return None, None
+
+    def res_reverse(self, query, errors):
+        return self.run_geocode(
+            self.REVERSE_GEOCODE_SCRIPT + gen_cache_key(query), errors)
 
     # Phone number lookup currently provided by ad-hoc area code guesswork
     PHONE_NUMBER_QUERY = "phone_number"
@@ -501,13 +504,13 @@ class GeocodeResult(object):
 
             country_code = country_code.upper()
             region_code = region_code.upper() if region_code else None
-            if any(country_args) and not any(region_args):
-                latitude, longitude = countries.get(
-                    country_code, (latitude, longitude))
+            if not region_code or any(country_args) and not any(region_args):
+                longitude, latitude = countries.get(
+                    country_code, (longitude, latitude))
                 region_code = None
             else:
-                latitude, longitude = regions.get(country_code, {}).get(
-                    region_code, (latitude, longitude))
+                longitude, latitude = regions.get(country_code, {}).get(
+                    region_code, (longitude, latitude))
 
             result.update(
                 {
