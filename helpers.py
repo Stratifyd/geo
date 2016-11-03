@@ -1,8 +1,202 @@
 from bisect import bisect_left
-from collections import deque
+from collections import deque, OrderedDict
 from itertools import product
+from marshal import loads, dumps
 from math import log, radians, sin, cos, atan2, sqrt
+from multiprocessing import Lock
 from numbers import Number
+from urllib import urlencode
+from urlparse import parse_qsl
+
+
+class LockedIterator(object):
+
+    def __init__(self, iterator, lock_past):
+        self.__iter = (obj for obj in iterator)
+        self.__seen = 0
+        self.__past = lock_past
+        self.__lock = Lock()
+
+    def __add__(self, other):
+        self.__seen += other
+        return self
+
+    def __sub__(self, other):
+        self.__seen -= min(other, self.__seen)
+        if self.__seen <= self.__past:
+            self.unlock()
+        return self
+
+    def __len__(self):
+        return max(self.__seen, 0)
+
+    def __iter__(self):
+        while True:
+            try:
+                yield self.__next__()
+            except:
+                break
+
+    def __next__(self):
+        if self.__seen > self.__past:
+            self.__lock.acquire()
+            return self.__next__()
+        else:
+            self.__seen += 1
+            return next(self.__iter)
+
+    def __repr__(self):
+        return '<iterlock %d / %d %slocked>' % (
+            self.__seen, self.__past, '' if self.is_locked() else 'un')
+
+    def next(self):
+        return self.__next__()
+
+    def __internal_state(self, open=False, lock=False):
+        """
+          Helper method which returns the internal state of the lock:
+            True, if the lock is currently locked
+            False, if the lock is currently opened
+
+          This method can also be used to change the internal lock state:
+            Given open=True, the lock will be opened
+            Given lock=True, the lock will be closed
+            Given open=False and lock=False, the lock's state will be
+              determined and returned, after restoring the lock's state.
+
+          See below for a functional explanation.
+
+          The function threading.Lock.acquire takes a single positional
+            argument, which defaults to True. This boolean flag allows the user
+            to switch between two methods of Lock acquisition:
+
+          threading.Lock.acquire(True) --> Block until the lock is acquired.
+          threading.Lock.acquire(False) --> Attempt to acquire lock.
+            If the lock is *already* acquired, return False,
+            Else, acquire the lock, and return True.
+
+          As such, method logic proceeds as follows:
+          Situation A:
+            threading.Lock.acquire(False) returns False,
+            The lock was in a locked state, and still is.
+          Situation B:
+            threading.Lock.acquire(False) returns True,
+            The lock was in an opened state, and is now locked.
+          Regardless of situation, the lock is now locked. If the keyword
+            argument "open" was passed in as True, we open the lock, and report
+            the internal state as opened (False).
+          Likewise, if "lock" was passed as True: we perform no further
+            modifications to the lock itself, and report the internal state as
+            locked (True).
+          Otherwise, if the lock was originally open, it is now locked. We
+            release the lock, then return the boolean flag originally received
+            from threading.Lock.acquire(False).
+        """
+        was_open = self.__lock.acquire(False)
+        if open:
+            self.__lock.release()
+            return False
+        elif lock:
+            return True
+        elif was_open:
+            self.__lock.release()
+        return was_open
+
+    def is_locked(self):
+        return self.__internal_state()
+
+    def unlock(self):
+        return self.__internal_state(open=True)
+
+
+class CacheDictionary(object):
+    CACHE_SIZE_MIN = 10000
+
+    @staticmethod
+    def gen_cache_key(params):
+        return urlencode(sorted([(k.encode('utf-8'), v.encode('utf-8'))
+                                 for k, v in params.items()]))
+
+    @staticmethod
+    def restore_cache_key(key):
+        return OrderedDict([(k.decode('utf-8'), v.decode('utf-8'))
+                            for k, v in parse_qsl(key)])
+
+    def __init__(self, maxsize=CACHE_SIZE_MIN, weakref=False):
+        if maxsize < 1:
+            raise ValueError("Cannot instantiate a dictionary with a zero or "
+                             "negative key count!")
+        super(self.__class__, self).__init__()
+        self.__cache = dict()
+        self.__keys = deque(maxlen=maxsize)
+        self.__ref = weakref
+        self.__reg = dict()
+        self.__size = maxsize
+        self.__store = maxsize
+
+    @property
+    def raw(self):
+        return self.__cache
+
+    @property
+    def maxsize(self):
+        return self.__store
+
+    def __contains__(self, key):
+        return self.__reg.get(key, key) in self.__cache
+
+    def __iter__(self):
+        return self.__cache.__iter__()
+
+    def quiet_get(self, key):
+        val = self.__cache.__getitem__(self.__reg.get(key, key))
+        if self.__ref:
+            return val
+        else:
+            return loads(val)
+
+    def __getitem__(self, key):
+        val = self.quiet_get(key)
+        self.__prioritize(key)
+        return val
+
+    def register_alternate(self, key, alt):
+        self.__reg[alt] = key
+
+    def __setitem__(self, key, val):
+        if key in self.__cache:
+            adj = 0
+        else:
+            adj = 1
+        if self.__ref:
+            self.__cache.__setitem__(key, val)
+        else:
+            self.__cache.__setitem__(key, dumps(val))
+        self.__size -= adj
+        if self.__size < 0:
+            self.__delete_oldest()
+        self.__prioritize(key)
+
+    def __delitem__(self, key):
+        self.__cache.__delitem__(key)
+        self.__keys.remove(key)
+        purge = []
+        for alt in self.__reg:
+            if self.__reg[alt] == key:
+                purge.append(alt)
+        for alt in purge:
+            del self.__reg[alt]
+        self.__size += 1
+
+    def __prioritize(self, key):
+        try:
+            self.__keys.remove(key)
+        except ValueError:
+            pass
+        self.__keys.append(key)
+
+    def __delete_oldest(self):
+        self.__delitem__(self.__keys[0])
 
 
 class RedBlackNode(object):
