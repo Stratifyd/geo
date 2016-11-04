@@ -156,7 +156,6 @@ class MaxmindMixin(object):
             if not isinstance(result, City):
                 return None
         except:
-            print format_exc()
             return None
 
         city = getattr(result, 'city', None)
