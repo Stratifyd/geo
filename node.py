@@ -23,6 +23,7 @@
 """
 
 from ta_common.field_names import ENV, MC
+from time import time
 from v2_ta_common.process_node import ProcessNode
 from v2_tier3_compute_node.geo.engine import Engine, Piston
 
@@ -43,9 +44,10 @@ class GeoLookup(ProcessNode):
         return False
 
     def setup(self):
-        self.engine = Piston.spark(
-            client=self.mango_helper,
-            nominatim_host=self.job_configuration.getNominatimHost())
+        start = time()
+        self.engine = Piston.spark(client=self.mongo_helper,
+                                   configuration=self.taste_conf)
+        print "Initialization required %f seconds." % (time() - start)
 
     def define_aws_queues(self):
         return [self.taste_conf.getTier3GeoSQSQueue(),
