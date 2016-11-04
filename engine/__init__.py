@@ -22,7 +22,7 @@ from time import time, sleep
 from traceback import format_exc
 from unicodedata import normalize
 from urllib import urlencode
-from urlparse import parse_qsl
+from urlparse import urlparse, parse_qsl
 from v2_tier3_compute_node.geo.helpers import LockedIterator, CacheDictionary
 from v2_tier3_compute_node.geo.mapping import CentroidUpdateHelper
 from warnings import warn
@@ -346,6 +346,11 @@ class Piston(object):
             country_geocode = configuration.getNominatimCountryGeoJSON()
             region_geocode = configuration.getNominatimRegionGeoJSON()
             phone_geocode = configuration.getNominatimPhoneGeoJSON()
+
+        nominatim_host = urlparse(nominatim_host)
+        nominatim_host = "%s://%s/nominatim/" % (
+            nominatim_host.scheme or 'http',
+            nominatim_host.netloc or nominatim_host.path)
 
         if country_geocode and region_geocode:
             configuration = {'_country_geocode': country_geocode,

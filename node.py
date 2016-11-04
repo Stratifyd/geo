@@ -135,6 +135,7 @@ if __name__ == '__main__':
     from pprint import pprint
     from ta_common.mango import Grove
     from ta_common.mango.relational_object.jobs import Jobs
+    from ta_common.taste_config_helper import TasteConf
 
     grove = Grove.get_mango_helper(compute=True, distribution=False)
     if ObjectId.is_valid(subdomain):
@@ -150,7 +151,7 @@ if __name__ == '__main__':
         print job.to_json(for_aws=True)
 
     if 'm' in run_type or 'e' in run_type or 'r' in run_type:
-        nom = Piston.spark(client=grove)
+        nom = Piston.spark(client=grove, configuration=TasteConf())
         if 'm' in run_type:  # print job conf's mapping
             print "Mapping:"
             pprint(get_mapping(nom, job, grove))

@@ -35,7 +35,7 @@ class NominatimMixin(object):
         except:
             if "DB Error" in body:
                 self._calls -= 1
-                wait = self._sleep * 10
+                wait = self._sleep.value * 10
                 if self._debug:
                     stdout.write(
                         "\nDetected PostgreSQL database "
@@ -52,14 +52,14 @@ class NominatimMixin(object):
                     stdout.write(
                         "\nDetected Nominatim internal error."
                         "\nBad Request: %s\n" % query)
-                sleep(self._sleep)
+                sleep(self._sleep.value)
             else:
                 if self._debug:
                     stdout.write(
                         "\nEncountered unknown error.\n%s\n%s"
                         "\nBad Request: %s\n"
                         % (body, format_exc(), query))
-                sleep(self._sleep)
+                sleep(self._sleep.value)
             raise
 
     @classmethod
