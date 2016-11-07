@@ -1,8 +1,9 @@
 from collections import Container, Counter, Mapping, OrderedDict
+from itertools import imap
 from jieba import cut as jieba_cut
-from math import log10
 from json import loads
 from marshal import loads as load_obj, dumps as dump_obj
+from math import log10
 from multiprocessing import Process, Value
 from multiprocessing.pool import ThreadPool
 from os import walk
@@ -241,6 +242,9 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                 }
             )
         except:
+            if self._debug:
+                stdout.write("\nEncountered issue with result normalization!"
+                             "\n%s" % format_exc())
             latitude = None
             longitude = None
 
@@ -276,6 +280,9 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                 }
             )
         except:
+            if self._debug:
+                stdout.write("\nEncountered issue with result normalization!"
+                             "\n%s" % format_exc())
             result.update(
                 {
                     "lat": latitude,
@@ -668,7 +675,7 @@ class Piston(object):
                              % (time() - runtime))
 
         self._config = self.generate_field_mapping(config)
-        self.__pool = ThreadPool(min(max(int(pool_size), 0), self.concurrent))
+        pool = ThreadPool(min(max(int(pool_size), 0), self.concurrent))
 
         bulk = self.__client[config.mongo_db][
             config.mongo_table].initialize_unordered_bulk_op()
@@ -676,13 +683,14 @@ class Piston(object):
             self.__client[config.mongo_db][config.mongo_table].find(
                 {}, projection={field: 1 for field in self._config},
                 cursor_type=CursorType.EXHAUST),
-            lock_past=self.concurrent * 150)
+            lock_past=self.concurrent * 2150)
 
         if verbose:
             self.report_status(locked, runtime)
             last = time()
 
-        for _id, geo in self.__pool.imap_unordered(self.__process, locked):
+        # for _id, geo in imap(self.__process, locked):
+        for _id, geo in pool.imap_unordered(self.__process, locked):
             locked -= 1
             if verbose and (time() - last) > 0.5:
                 self.report_status(locked, runtime)
@@ -698,8 +706,8 @@ class Piston(object):
             stdout.write("\n[% 9.3f] Geocoding complete.\n"
                          % (time() - runtime))
 
-        self.__pool.close()
-        self.__pool.join()
+        pool.close()
+        pool.join()
 
         if verbose:
             stdout.flush()

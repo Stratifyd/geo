@@ -11,10 +11,11 @@ from urlparse import parse_qsl
 
 class LockedIterator(object):
 
-    def __init__(self, iterator, lock_past):
+    def __init__(self, iterator, lock_past, chunk=0):
         self.__iter = (obj for obj in iterator)
         self.__seen = 0
         self.__past = lock_past
+        self.__hold = chunk
         self.__lock = Lock()
 
     def __add__(self, other):
@@ -23,7 +24,7 @@ class LockedIterator(object):
 
     def __sub__(self, other):
         self.__seen -= min(other, self.__seen)
-        if self.__seen <= self.__past:
+        if self.__seen <= (self.__past - self.__hold):
             self.unlock()
         return self
 
@@ -303,7 +304,10 @@ class RedBlackNode(object):
             self.__attributes = None
 
     def __getattr__(self, attr):
-        return self.attributes[attr]
+        if self.__attributes is not None:
+            return self.__attributes[attr]
+        raise AttributeError(
+            "'RedBlackNode' object has no attribute '%s'" % attr)
 
     def __setattr__(self, attr, item):
         try:
@@ -549,49 +553,75 @@ class RedBlackTree(object):
                 if node.left and node.key > start:
                     stack.append(node.left)
 
-    def find_nearest(self, key, fxn=lambda a, b: abs(a.key - b.key)):
+    def find_single_nearest(self, key):
         if self.__root and isinstance(key, Number):
-            observed = deque()
-            split_at = 0
-
             best = None
             stack = [self.__root]
+
             while stack:
-                new = False
                 node = stack.pop()
                 if node.key == key:
-                    best = node
-                    break
+                    return node
                 elif not best or abs(node.key - key) < abs(best.key - key):
-                    new = True
                     best = node
 
                 if node.right and node.key < key:
-                    if new:
-                        observed.appendleft(node)
-                        split_at += 1
                     stack.append(node.right)
                 elif node.left and node.key > key:
-                    if new:
-                        observed.append(node)
                     stack.append(node.left)
 
+            return best
+
+    def find_nearest(self, key, limit=None):
+        start = self.find_single_nearest(key)
+        if start:
+            nodes = [start]
+            stack = [abs(start.key - key)]
+        else:
+            raise StopIteration
+        visit = set()
+
+        while stack:
+            best = nodes.pop(0)
+            del stack[0]
             yield best
 
-            nodes = []
-            dists = []
-            total = 0
+            for neighbor in (best.left, best.right, best.parent,
+                             best.grandparent, best.great_uncle):
+                if neighbor:
+                    nkey = abs(neighbor.key - key)
+                    if nkey not in visit:
+                        index = bisect_left(stack, nkey)
+                        nodes.insert(index, neighbor)
+                        stack.insert(index, nkey)
+                        visit.add(nkey)
 
-            for node in self.__iter_depth_first(self.__root):
-                dist = fxn(node, best)
-                if dist > 0:
-                    index = bisect_left(dists, dist, lo=0, hi=total)
-                    dists.insert(index, dist)
-                    nodes.insert(index, node)
-                    total += 1
+    def find_nearest_by_function(self, key_or_node, fxn=None):
+        nodes = []
+        dists = []
+        total = 0
 
-            while nodes:
-                yield nodes.pop(0)
+        if isinstance(key_or_node, RedBlackNode):
+            best = key_or_node
+        else:
+            best = self.find_single_nearest(key_or_node)
+
+        if not hasattr(fxn, '__call__'):
+            del fxn
+
+            def fxn(a, b):
+                return abs(a.key - b.key)
+
+        for node in self.__iter_depth_first(self.__root):
+            dist = fxn(node, best)
+            if dist > 0:
+                index = bisect_left(dists, dist, lo=0, hi=total)
+                dists.insert(index, dist)
+                nodes.insert(index, node)
+                total += 1
+
+        for node in nodes:
+            yield node
 
 
 class GeoTree(object):
@@ -644,8 +674,8 @@ class GeoTree(object):
         curve = self.geo_curve(latitude, longitude)
         self.__tree.insert(curve, *order, **named)
 
-    def find_exactly(self, coords):
-        curve = self.geo_curve(*coords)
+    def find_exactly(self, latitude, longitude):
+        curve = self.geo_curve(latitude, longitude)
         return self.__tree.find_between(curve)
 
     def find_between(self, min_coords, max_coords):
@@ -663,10 +693,7 @@ class GeoTree(object):
                 yield node
 
     @staticmethod
-    def haversine(coord1, coord2, radius=6371):
-        latitude1, longitude1 = coord1
-        latitude2, longitude2 = coord2
-
+    def haversine(latitude1, longitude1, latitude2, longitude2, radius=6371):
         diff_lat = radians(latitude2 - latitude1)
         diff_lon = radians(longitude2 - longitude1)
 
@@ -679,9 +706,12 @@ class GeoTree(object):
 
     @classmethod
     def __haversine(cls, node1, node2):
-        return cls.haversine((node1.latitude, node1.longitude),
-                             (node2.latitude, node2.longitude))
+        return cls.haversine(node1.latitude, node1.longitude,
+                             node2.latitude, node2.longitude)
 
-    def find_nearest(self, coords):
-        return self.__tree.find_nearest(key=self.geo_curve(*coords),
-                                        fxn=self.__haversine)
+    def find_approximate_nearest(self, latitude, longitude):
+        return self.__tree.find_nearest(self.geo_curve(latitude, longitude))
+
+    def find_exact_nearest(self, latitude, longitude):
+        return self.__tree.find_nearest_by_function(
+            self.geo_curve(latitude, longitude), fxn=self.__haversine)

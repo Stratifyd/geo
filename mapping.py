@@ -576,11 +576,11 @@ class CentroidUpdateHelper(object):
         comparisons = 0
 
         if latitude is not None and longitude is not None:
-            coord = (latitude, longitude)
             found = 0
             nnode = None
             point = Point(longitude, latitude)
-            for node in self.__geo_tree.find_nearest(coord):
+            for node in self.__geo_tree.find_approximate_nearest(
+                    latitude, longitude):
                 found += 1
 
                 ccode = node.ccode
@@ -592,17 +592,15 @@ class CentroidUpdateHelper(object):
                 if region:
                     comparisons += 1
                     if contains(region, point):
-                        comparisons += 1
-                        if contains(country, point):
-                            country_code = ccode
-                            region_code = rcode
-                            if verbose:
-                                print u'GeoCode determined by intersection.'
-                                print u'Time: %f seconds.' % (time() - runtime)
-                                print u'Comp: %d polygons.' % comparisons
-                                print self.translate(country_code, region_code)
-                                print
-                            break
+                        country_code = ccode
+                        region_code = rcode
+                        if verbose:
+                            print u'GeoCode determined by intersection.'
+                            print u'Time: %f seconds.' % (time() - runtime)
+                            print u'Comp: %d polygons.' % comparisons
+                            print self.translate(country_code, region_code)
+                            print
+                        break
                 elif nnode is None:
                     comparisons += 1
                     if contains(country, point):
