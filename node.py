@@ -104,21 +104,33 @@ if __name__ == '__main__':
             type_, query = piston.remap_documents(doc, mapping)
             if not query:
                 continue
-            examples.append({"i": query, "t": type_, "r": {"_id": doc["_id"]}})
+
+            examples.append({"input": query, "type": type_, "_id": doc["_id"]})
             for attempt in range(5):
                 geocode = piston.fire(type_, query)
-                print "get_%s" % type_, query, attempt
+
                 if query:
                     query = getattr(geocode, "get_%s" % type_)(
                         query=query, attempt=attempt)
                 else:
                     break
-                if query:
-                    examples[-1][str(attempt)] = getattr(
-                        geocode, "res_%s" % type_)(query, set())
+
+                if not query:
+                    break
+                example = examples[-1].setdefault(str(attempt), {})
+                example["raw_query"] = query
+
+                server_response = getattr(
+                    geocode, "res_%s" % type_)(query, set())
+                if server_response:
+                    example["raw_result"] = server_response[0]
                 else:
-                    examples[-1][str(attempt)] = None
-                examples[-1]["r"][str(attempt)] = geocode.result
+                    example["raw_result"] = None
+
+                if geocode.result:
+                    example["geo_result"] = geocode.result[0]
+                else:
+                    example["geo_result"] = None
 
         return examples
 
@@ -158,7 +170,9 @@ if __name__ == '__main__':
             print
         if 'e' in run_type:  # print example from job
             print "Examples:"
-            pprint(get_example(nom, job, grove))
+            for example in get_example(nom, job, grove):
+                pprint(example)
+                print
             print
 
         if 'c' in run_type and 'r' in run_type:

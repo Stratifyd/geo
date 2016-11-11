@@ -197,18 +197,19 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                                      % format_exc())
                     sleep(self._sleep.value)
 
-        try:
-            if not self.__cached:
-                self.__result = map(self.__normalize, self.__result)
-                if self._cache:
-                    self._cache[key] = self.__result
+            try:
+                if not self.__cached:
+                    self.__result = map(self.__normalize, self.__result)
+                    if self._cache:
+                        self._cache[key] = self.__result
+                if self._cache and key:
                     for alt in mirror:
                         self._cache.register_alternate(key, alt)
-        except:
-            if self._debug:
-                stdout.write("\nEncountered issue with result normalization!"
-                             "\n%s" % format_exc())
-            self.__result = []
+            except:
+                if self._debug:
+                    stdout.write("\nEncountered issue with normalization!\n%s"
+                                 % format_exc())
+                self.__result = []
 
         if isinstance(self.__result, list) and len(self.__result) > 0:
             return self.__result
@@ -223,10 +224,17 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
         region_args = tuple(address[key] for key in self.REGION_KEYS
                             if key in address and address[key])
 
-        result = {
-            "id": int(dictionary.get("osm_id", -1)),
-            "full": dictionary.get("display_name", ""),
-        }
+        result = {}
+
+        try:
+            result["id"] = int(dictionary["osm_id"])
+        except:
+            result["id"] = -1
+
+        try:
+            result["full"] = unicode(dictionary["display_name"])
+        except:
+            result["full"] = u""
 
         try:
             latitude = float(dictionary["lat"])
@@ -637,7 +645,7 @@ class Piston(object):
 
                 self.HITS.value,
                 self.MISS.value,
-                self.MISS.value + self.CONT.value,
+                self.CONT.value,
 
                 self.CODE.value,
                 self.FUZZ.value,
@@ -647,7 +655,7 @@ class Piston(object):
                 float(self.HITS.value + self.MISS.value) / (time() - runtime),
                 self.HITS.value + self.MISS.value,
 
-                len(locked)))
+                locked))
         stdout.flush()
 
     def iterprocess(self, config, subdomain=None, pool_size=4, verbose=False):
@@ -681,19 +689,18 @@ class Piston(object):
             config.mongo_table].initialize_unordered_bulk_op()
         locked = LockedIterator(
             self.__client[config.mongo_db][config.mongo_table].find(
-                {}, projection={field: 1 for field in self._config},
-                cursor_type=CursorType.EXHAUST),
+                {}, projection={field: 1 for field in self._config}),
             lock_past=self.concurrent * 2150)
 
         if verbose:
-            self.report_status(locked, runtime)
+            self.report_status(len(locked), runtime)
             last = time()
 
-        # for _id, geo in imap(self.__process, locked):
         for _id, geo in pool.imap_unordered(self.__process, locked):
+            # for _id, geo in imap(self.__process, locked):
             locked -= 1
             if verbose and (time() - last) > 0.5:
-                self.report_status(locked, runtime)
+                self.report_status(len(locked), runtime)
                 last = time()
             if not _id:
                 continue
@@ -702,7 +709,7 @@ class Piston(object):
             yield geo
 
         if verbose:
-            self.report_status(locked, runtime)
+            self.report_status(len(locked), runtime)
             stdout.write("\n[% 9.3f] Geocoding complete.\n"
                          % (time() - runtime))
 
@@ -743,17 +750,17 @@ class Piston(object):
 
                 if geocode.call_was_cached:
                     self.HITS.value += 1
+                    self.__used.add(geocode.cache_key)
                 else:
                     self.MISS.value += 1
-                    self.CONT.value += geocode.calls - 1
+                self.CONT.value += geocode.calls
 
                 if geocode.result:
                     result = geocode.result[0]
-                    self.__used.add(geocode.cache_key)
                 else:
                     result = {}
 
-                if result.get('full'):
+                if result.get('id') > 0 or result.get('full'):
                     self.CODE.value += 1
 
                 if result.get('code', {}).get('country'):

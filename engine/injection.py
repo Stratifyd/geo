@@ -1,6 +1,7 @@
 from collections import Counter
 from geoip2.database import Reader
 from geoip2.models import City
+from itertools import combinations
 from json import loads
 from math import log10
 from phonenumbers import format_number, PhoneNumber, PhoneNumberMatcher
@@ -20,8 +21,23 @@ class NominatimMixin(object):
     TYPICAL_GEOCODE_QUERY = "geocode"
     TYPICAL_GEOCODE_SCRIPT = "search.php?"
     ATTEMPT_GEOCODE_ADJUST = regex_compile(r'[^\p{L}\p{N}\p{M},]', regex_U)
-    CONSIDERATION_PRIORITY = ('country', 'state', 'county',
-                              'city', 'street', 'postalcode')
+    CONSIDERATION_PRIORITY = (
+        'street', 'postalcode', 'county', 'city', 'state', 'country')
+    CONSIDERATION_ATTEMPTS = tuple(
+        map(frozenset, (
+            ('country', 'state', 'city', 'street'),
+            ('country', 'state', 'city', 'county'),
+            ('country', 'postalcode'),
+            ('country', 'city'),
+            ('country', 'state'),
+            ('state', 'county'),
+            ('state', 'city'),
+            ('city', 'street'),
+            ('county', 'street'),
+            ('postalcode', 'street'),
+            ('street',),
+            ('postalcode',)
+        )))
 
     @staticmethod
     def __urlencode_query(params):
@@ -67,17 +83,13 @@ class NominatimMixin(object):
         params = {field: query[field] for field in cls.CONSIDERATION_PRIORITY
                   if field in query and query[field]}
         if params:
-            for idx in range(len(cls.CONSIDERATION_PRIORITY)):
+            for keyset in cls.CONSIDERATION_ATTEMPTS:
+                if keyset.difference(params):
+                    continue
                 if attempt > 0:
-                    field = cls.CONSIDERATION_PRIORITY[-(idx + 1)]
-                    if field in params:
-                        del params[field]
-                        attempt -= 1
+                    attempt -= 1
                 else:
-                    if params:
-                        return params
-                    else:
-                        break
+                    return {field: params[field] for field in keyset}
 
         if attempt > 0:
             if juggle:

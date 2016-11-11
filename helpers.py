@@ -1,7 +1,8 @@
 from bisect import bisect_left
+from cPickle import loads as cloads, dumps as cdumps
 from collections import deque, OrderedDict
-from itertools import product
-from marshal import loads, dumps
+from itertools import product, imap
+from marshal import loads as mloads, dumps as mdumps
 from math import log, radians, sin, cos, atan2, sqrt
 from multiprocessing import Lock
 from numbers import Number
@@ -123,7 +124,7 @@ class CacheDictionary(object):
         return OrderedDict([(k.decode('utf-8'), v.decode('utf-8'))
                             for k, v in parse_qsl(key)])
 
-    def __init__(self, maxsize=CACHE_SIZE_MIN, weakref=False):
+    def __init__(self, maxsize=CACHE_SIZE_MIN, weakref=False, marshal=False):
         if maxsize < 1:
             raise ValueError("Cannot instantiate a dictionary with a zero or "
                              "negative key count!")
@@ -134,6 +135,15 @@ class CacheDictionary(object):
         self.__reg = dict()
         self.__size = maxsize
         self.__store = maxsize
+
+        if marshal:
+            def dumps(obj):
+                return mdumps(self.legal_marshal_transform(obj))
+        else:
+            def dumps(obj):
+                return cdumps(obj, True)
+        self.dumps = dumps
+        self.loads = mloads if marshal else cdumps
 
     @property
     def raw(self):
@@ -154,7 +164,7 @@ class CacheDictionary(object):
         if self.__ref:
             return val
         else:
-            return loads(val)
+            return self.loads(val)
 
     def __getitem__(self, key):
         val = self.quiet_get(key)
@@ -172,7 +182,7 @@ class CacheDictionary(object):
         if self.__ref:
             self.__cache.__setitem__(key, val)
         else:
-            self.__cache.__setitem__(key, dumps(val))
+            self.__cache.__setitem__(key, self.dumps(val))
         self.__size -= adj
         if self.__size < 0:
             self.__delete_oldest()
@@ -198,6 +208,37 @@ class CacheDictionary(object):
 
     def __delete_oldest(self):
         self.__delitem__(self.__keys[0])
+
+    LEGAL_MARSHAL_TYPES = frozenset((
+        bool, int, long, float, complex,  # Numeric types
+        str, unicode,  # String types
+        type(compile('""', '<string>', 'single'))  # Raw code type
+    ))
+    LEGAL_MARSHAL_TUPLE = tuple(LEGAL_MARSHAL_TYPES)
+    LEGAL_MARSHAL_ITERS = frozenset((
+        tuple, list, set, frozenset, dict  # Container types
+    ))
+
+    @classmethod
+    def legal_marshal_transform(cls, container_or_object):
+        if isinstance(container_or_object, cls.LEGAL_MARSHAL_TUPLE):
+            return container_or_object
+
+        for typ in type(container_or_object).__mro__:
+            if typ in cls.LEGAL_MARSHAL_TYPES:
+                return typ(container_or_object)
+            if typ in cls.LEGAL_MARSHAL_ITERS:
+                container_or_object = typ(container_or_object)
+                if isinstance(container_or_object, dict):  # We have a mapping
+                    return {cls.legal_marshal_transform(key):
+                            cls.legal_marshal_transform(val)
+                            for key, val in container_or_object.iteritems()}
+                else:  # We have an enumerable iterator
+                    return type(container_or_object)(
+                        imap(cls.legal_marshal_transform, container_or_object))
+
+        raise TypeError("Cannot 'fix' %s (%s) for marshalling."
+                        % (container_or_object, type(container_or_object)))
 
 
 class RedBlackNode(object):
