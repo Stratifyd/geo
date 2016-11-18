@@ -413,6 +413,9 @@ class Piston(object):
         information = {field_type: [] for field_type in mapping.values()}
         for field_name, field_type in mapping.iteritems():
             information[field_type].append(document.get(field_name))
+        return self.remap_information(information)
+
+    def remap_information(self, information):
         for field_type in information.iterkeys():
             information[field_type] = normalize('NFKC', u' '.join(
                 filter(None, (p.strip() for p in information[field_type]))))
@@ -426,6 +429,7 @@ class Piston(object):
             geo_lookup = getattr(self, '_' + field_type)(information)
             if isinstance(geo_lookup, dict):
                 return search_type, geo_lookup
+
         return NominatimMixin.TYPICAL_GEOCODE_QUERY, self._unknown(information)
 
     LL = regex_compile(r'[^\+\-\.0-9]+')
@@ -552,7 +556,6 @@ class Piston(object):
                     information.get('postcode', u'')))
             if postcode:
                 carry['postalcode'] = postcode
-                extra = (postcode,) + extra
             return self._unknown(information, carry, extra)
         except:
             return None
@@ -734,11 +737,17 @@ class Piston(object):
                 stdout.write("[% 9.3f] Bulk update of mongo cache complete.\n"
                              % (time() - runtime))
 
-    def fire(self, type_, query):
-        return Stroke(
-            host=self.__ns, query=query, assoc=self.__map, cache=self.__cache,
-            search_type=type_, _fetch_function=self.session_fetch_function,
-            _catch_exceptions=(ConnectionError, Timeout), _sleep=self.__sleep)
+    def fire(self, query, type_=None):
+        if type_ is None:
+            type_, query = self.remap_information(query)
+        return Stroke(host=self.__ns,
+                      query=query,
+                      assoc=self.__map,
+                      cache=self.__cache,
+                      search_type=type_,
+                      _fetch_function=self.session_fetch_function,
+                      _catch_exceptions=(ConnectionError, Timeout),
+                      _sleep=self.__sleep)
 
     def __process(self, dictionary):
         try:
@@ -746,7 +755,7 @@ class Piston(object):
 
             type_, query = self.remap_documents(dictionary, self._config)
             if isinstance(query, dict):
-                geocode = self.fire(type_, query)
+                geocode = self.fire(query, type_)
 
                 if geocode.call_was_cached:
                     self.HITS.value += 1

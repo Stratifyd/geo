@@ -1,10 +1,9 @@
 from collections import Counter
 from geoip2.database import Reader
 from geoip2.models import City
-from itertools import combinations
 from json import loads
 from math import log10
-from phonenumbers import format_number, PhoneNumber, PhoneNumberMatcher
+from phonenumbers import format_number, PhoneNumberMatcher
 from regex import compile as regex_compile, UNICODE as regex_U
 from sys import stdout
 from ta_common.geo.centroid import phones
@@ -35,8 +34,9 @@ class NominatimMixin(object):
             ('city', 'street'),
             ('county', 'street'),
             ('postalcode', 'street'),
-            ('street',),
-            ('postalcode',)
+            ('postalcode',),
+            ('city',),
+            ('state',),
         )))
 
     @staticmethod

@@ -107,7 +107,7 @@ if __name__ == '__main__':
 
             examples.append({"input": query, "type": type_, "_id": doc["_id"]})
             for attempt in range(5):
-                geocode = piston.fire(type_, query)
+                geocode = piston.fire(query, type_)
 
                 if query:
                     query = getattr(geocode, "get_%s" % type_)(

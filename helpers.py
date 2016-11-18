@@ -143,7 +143,7 @@ class CacheDictionary(object):
             def dumps(obj):
                 return cdumps(obj, True)
         self.dumps = dumps
-        self.loads = mloads if marshal else cdumps
+        self.loads = mloads if marshal else cloads
 
     @property
     def raw(self):
