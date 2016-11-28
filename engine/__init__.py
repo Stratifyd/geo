@@ -366,8 +366,7 @@ class Piston(object):
         nominatim_host = "%s://%s/nominatim/" % (
             nominatim_host.scheme or 'http',
             nominatim_host.netloc or nominatim_host.path)
-        
-        print "Using host: " , nominatim_host 
+
         if country_geocode and region_geocode:
             configuration = {'_country_geocode': country_geocode,
                              '_region_geocode': region_geocode,

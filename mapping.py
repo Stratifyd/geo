@@ -601,7 +601,7 @@ class CentroidUpdateHelper(object):
                             print self.translate(country_code, region_code)
                             print
                         break
-                elif nnode is None:
+                if nnode is None:
                     comparisons += 1
                     if contains(country, point):
                         nnode = node
