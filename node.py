@@ -77,6 +77,130 @@ class GeoLookup(ProcessNode):
         pass
 
 if __name__ == '__main__':
+    def get_sparse_geocodes(config, grove):
+        from collections import Mapping
+        from operator import itemgetter
+        from tabulate import tabulate
+
+        collection = grove[config['mongo_db']][str(config['_id'])]
+        fields = []
+
+        try:
+            mapping = config.params.geo_index
+            assert(isinstance(mapping, Mapping))
+        except:
+            mapping = {}
+
+        for consider in Piston.LEGAL_CONFIGURATION_OPTIONS:
+            if mapping.get(consider):
+                fields.extend(mapping[consider])
+
+        aggregation = {
+            "_id": {"c": "$_geo.code.country_name",
+                    "r": "$_geo.code.region_name"},
+            "_count": {"$sum": 1}
+        }
+        headr = ["geocode", "count"]
+        table = []
+
+        for doc in collection.aggregate(
+                [
+                    {
+                        "$group": aggregation
+                    },
+                    {
+                        "$sort": {
+                            "_id.c": 1,
+                            "_id.r": 1,
+                            "_count": 1
+                        }
+                    }
+                ]):
+            country = doc["_id"].get("c", None)
+            region = doc["_id"].get("r", None)
+
+            if country and region:
+                geo = "%s, %s" % (country, region)
+            elif country:
+                geo = country
+            else:
+                geo = "<no geocode>"
+
+            table.append((geo, doc["_count"]))
+
+        print tabulate(table, headers=headr)
+
+    def get_dense_geocodes(config, grove):
+        from collections import Mapping
+        from operator import itemgetter
+        from tabulate import tabulate
+
+        collection = grove[config['mongo_db']][str(config['_id'])]
+        fields = []
+
+        try:
+            mapping = config.params.geo_index
+            assert(isinstance(mapping, Mapping))
+        except:
+            mapping = {}
+
+        for consider in Piston.LEGAL_CONFIGURATION_OPTIONS:
+            if mapping.get(consider):
+                fields.extend(mapping[consider])
+
+        aggregation = {
+            "_id": {field: "$" + field for field in fields},
+            "_geo_c": {"$addToSet": "$_geo.code.country_name"},
+            "_geo_r": {"$addToSet": "$_geo.code.region_name"},
+            "_count": {"$sum": 1},
+            "_found": {"$addToSet": "$_geo.full"}
+        }
+        headr = ["geocode", "count", "input", "location"]
+        table = []
+
+        for doc in collection.aggregate(
+                [
+                    {
+                        "$group": aggregation
+                    },
+                    {
+                        "$sort": {
+                            "_count": 1,
+                            "_geo_c": 1,
+                            "_geo_r": 1
+                        }
+                    }
+                ]):
+            country = doc["_geo_c"]
+            region = doc["_geo_r"]
+
+            if isinstance(country, list) and len(country) > 0:
+                country = country[0]
+            else:
+                country = None
+
+            if isinstance(region, list) and len(region) > 0:
+                region = region[0]
+            else:
+                region = None
+
+            if country and region:
+                geo = "%s, %s" % (country, region)
+            elif country:
+                geo = country
+            else:
+                geo = "<no geocode>"
+
+            table.append((
+                geo,
+                doc["_count"],
+                u", ".join(filter(None, (doc["_id"].get(field).strip()
+                                         for field in fields))
+                           ) or "<no input>",
+                u" | ".join(filter(None, doc["_found"])) or "<no location>"))
+
+        print tabulate(table, headers=headr)
+
     def get_mapping(piston, config, grove):
         return piston.generate_field_mapping(config)
 
@@ -161,6 +285,14 @@ if __name__ == '__main__':
 
     if 'p' in run_type:  # print JSON-encoded job config
         print job.to_json(for_aws=True)
+
+    if 'c' in run_type:  # Check table result
+        print "Geocodes:"
+        get_sparse_geocodes(job, grove)
+
+    if 'd' in run_type:  # Check table result
+        print "Geocodes:"
+        get_dense_geocodes(job, grove)
 
     if 'm' in run_type or 'e' in run_type or 'r' in run_type:
         nom = Piston.spark(client=grove, configuration=TasteConf())

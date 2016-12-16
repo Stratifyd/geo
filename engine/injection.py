@@ -27,6 +27,7 @@ class NominatimMixin(object):
             ('country', 'state', 'city', 'street'),
             ('country', 'state', 'city', 'county'),
             ('country', 'postalcode'),
+            ('country', 'state', 'city',),
             ('country', 'city'),
             ('country', 'state'),
             ('state', 'county'),
