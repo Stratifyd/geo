@@ -387,6 +387,7 @@ class CentroidUpdateHelper(object):
         if isinstance(_country_geocode, dict):
             _country_geocode = _country_geocode
         elif isinstance(_country_geocode, basestring):
+            
             if _country_geocode.endswith('xz'):
                 _country_geocode = loads(
                     Command('xz')('-dc', _country_geocode).stdout)
