@@ -28,17 +28,22 @@ class NominatimMixin(object):
             ('country', 'state', 'city', 'county'),
             ('country', 'postalcode'),
             ('country', 'state', 'city',),
-            ('country', 'city'),
-            ('country', 'state'),
-            ('state', 'county'),
             ('state', 'city'),
+            ('country', 'state'),
+            ('country', 'city'),
+            ('state', 'county'),
             ('city', 'street'),
             ('county', 'street'),
             ('postalcode', 'street'),
+            ('country',),
+            ('state',),
             ('postalcode',),
             ('city',),
-            ('state',),
+            ('street',),
         )))
+    BLACKLIST_PHRASES = frozenset([
+        "other", "n/a", "none", "unknown", "nowhere",
+        u'\u6d77\u5916', u'\u5176\u4ed6', u'\u5176\u5b83'])
 
     @staticmethod
     def __urlencode_query(params):
@@ -81,6 +86,15 @@ class NominatimMixin(object):
 
     @classmethod
     def get_geocode(cls, query, attempt=0, juggle=False):
+        for value in query.itervalues():
+            substrings = value.lower().split()
+            if len(substrings) > 2:
+                continue
+            for substring in substrings:
+                for ignore in cls.BLACKLIST_PHRASES:
+                    if substring.startswith(ignore):
+                        return None
+
         params = {field: query[field] for field in cls.CONSIDERATION_PRIORITY
                   if field in query and query[field]}
         if params:

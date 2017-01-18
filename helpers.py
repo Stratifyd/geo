@@ -443,7 +443,7 @@ class RedBlackTree(object):
         return representation
 
     def iter_sorted(self, reverse=False):
-        pass
+        raise NotImplementedError
 
     @classmethod
     def __iter_breadth_first(cls, node, _level=None):

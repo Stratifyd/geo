@@ -280,8 +280,10 @@ if __name__ == '__main__':
         subdomain = str(grove[MC.APP_DB][MC.SUB_COL].find_one(
             {"sub": subdomain}, {"_id": 1})["_id"])
 
-    job = Jobs.fetch(grove[subdomain], fid=job_info, current=True)
-    job = job or Jobs.fetch(grove[subdomain], _id=job_info, current=True)
+    job = Jobs.fetch(grove[subdomain],
+                     fid=job_info, current=True, _protected=False)
+    job = job or Jobs.fetch(grove[subdomain],
+                            _id=job_info, current=True, _protected=False)
 
     if 'p' in run_type:  # print JSON-encoded job config
         print job.to_json(for_aws=True)
@@ -315,4 +317,6 @@ if __name__ == '__main__':
         elif 'r' in run_type:  # re-run geo for job
             print "Rerunning:"
             rerun_job(nom, job, grove)
+            job['meta.contains.geo'] = True
+            job.push_changes(grove[subdomain], quiet=True, upsert=True)
         print
