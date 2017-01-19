@@ -24,8 +24,38 @@
 
 try:
     from cfuzzyset import cFuzzySet
+
+    class FuzzyMapping(object):
+
+        def __init__(self):
+            self.__set = cFuzzySet()
+            self.__map = dict()
+            self.__fxn = itemgetter(0)
+
+        def __getitem__(self, key):
+            _best, stored, _conf = self.get_stored_tuple(key)
+            return stored
+
+        def get_confidence(self, key):
+            _best, _stored, conf = self.get_stored_tuple(key)
+            return conf
+
+        def get_best_match(self, key):
+            best, _stored, _conf = self.get_stored_tuple(key)
+            return best
+
+        def get_stored_tuple(self, key):
+            try:
+                return (key, self.__map[key], 1.0)
+            except:
+                conf, item = max(self.__set.get(key), key=self.__fxn)
+                return (item, self.__map[item], conf)
+
+        def __setitem__(self, key, val):
+            self.__set.add(key)
+            self.__map[key] = val
 except:
-    cFuzzySet = set
+    FuzzyMapping = None
 from collections import Container
 from helpers import GeoTree
 from json import load, loads, dump, dumps
@@ -90,37 +120,6 @@ except:
         raise ImportError(
             u"GeoMapping object failed to instantiate;\nGDAL: %s\n\nShapely: %s"
             % (gdal_error, format_exc()))
-
-
-class FuzzyMapping(object):
-
-    def __init__(self):
-        self.__set = cFuzzySet()
-        self.__map = dict()
-        self.__fxn = itemgetter(0)
-
-    def __getitem__(self, key):
-        _best, stored, _conf = self.get_stored_tuple(key)
-        return stored
-
-    def get_confidence(self, key):
-        _best, _stored, conf = self.get_stored_tuple(key)
-        return conf
-
-    def get_best_match(self, key):
-        best, _stored, _conf = self.get_stored_tuple(key)
-        return best
-
-    def get_stored_tuple(self, key):
-        try:
-            return (key, self.__map[key], 1.0)
-        except:
-            conf, item = max(self.__set.get(key), key=self.__fxn)
-            return (item, self.__map[item], conf)
-
-    def __setitem__(self, key, val):
-        self.__set.add(key)
-        self.__map[key] = val
 
 
 class CentroidUpdateHelper(object):
@@ -340,6 +339,8 @@ class CentroidUpdateHelper(object):
         return country_shapes
 
     def get_country_fuzzies(self, country_geocode):
+        if FuzzyMapping is None:
+            return None
         country_fuzzies = FuzzyMapping()
         for ccode, details in country_geocode.iteritems():
             if details.get('display_name'):
@@ -365,6 +366,8 @@ class CentroidUpdateHelper(object):
         return region_shapes
 
     def get_region_fuzzies(self, region_geocode):
+        if FuzzyMapping is None:
+            return None
         region_fuzzies = FuzzyMapping()
         for ccode, regions in region_geocode.iteritems():
             for rcode, details in regions.iteritems():
@@ -390,7 +393,6 @@ class CentroidUpdateHelper(object):
         if isinstance(_country_geocode, dict):
             _country_geocode = _country_geocode
         elif isinstance(_country_geocode, basestring):
-            
             if _country_geocode.endswith('xz'):
                 _country_geocode = loads(
                     Command('xz')('-dc', _country_geocode).stdout)
@@ -623,7 +625,9 @@ class CentroidUpdateHelper(object):
                     print self.translate(country_code, region_code)
                     print
 
-        if (country_code is None and (
+        if (self._country_fuzzies is not None and
+            self._region_fuzzies is not None and
+            country_code is None and (
                 any(country_strings) or any(region_strings))):
             best_conf = self._fuzzy_treshold
             for country in country_strings:
