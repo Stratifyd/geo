@@ -22,7 +22,10 @@
   @requires: python 2.7.10
 """
 
-from cfuzzyset import cFuzzySet
+try:
+    from cfuzzyset import cFuzzySet
+except:
+    cFuzzySet = set
 from collections import Container
 from helpers import GeoTree
 from json import load, loads, dump, dumps
