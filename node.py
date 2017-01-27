@@ -101,7 +101,8 @@ if __name__ == '__main__':
             "_count": {"$sum": 1}
         }
         headr = ["geocode", "count"]
-        table = []
+        c_tab = {}
+        r_tab = []
 
         for doc in collection.aggregate(
                 [
@@ -120,15 +121,21 @@ if __name__ == '__main__':
             region = doc["_id"].get("r", None)
 
             if country and region:
-                geo = "%s, %s" % (country, region)
+                rgeo = "%s, %s" % (country, region)
+                cgeo = country
             elif country:
-                geo = country
+                cgeo = rgeo = country
             else:
-                geo = "<no geocode>"
+                cgeo = rgeo = "<no geocode>"
 
-            table.append((geo, doc["_count"]))
+            c_tab[cgeo] = c_tab.get(cgeo, 0) + doc["_count"]
+            r_tab.append((rgeo, doc["_count"]))
 
-        print tabulate(table, headers=headr)
+        print "Countries"
+        print tabulate(sorted(c_tab.items(), key=itemgetter(1)), headers=headr)
+        print
+        print "Regions"
+        print tabulate(r_tab, headers=headr)
 
     def get_dense_geocodes(config, grove):
         from collections import Mapping

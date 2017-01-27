@@ -5,7 +5,7 @@ from json import loads
 from math import log10
 from phonenumbers import format_number, PhoneNumberMatcher
 from regex import compile as regex_compile, UNICODE as regex_U
-from sys import stdout
+from sys import stdout, maxunicode
 from ta_common.geo.centroid import phones
 from ta_common.geo.mapping import phone_codes
 from time import sleep
@@ -16,6 +16,9 @@ __all__ = ('NominatimMixin', 'MaxmindMixin', 'PhoneNumberMixin')
 
 
 class NominatimMixin(object):
+    NS = regex_compile(r'[\p{script=Han}\p{script=Tibetan}\p{script=Lao}'
+                       r'\p{script=Thai}\p{script=Khmer}]', regex_U)
+    NS = frozenset(NS.findall(u''.join(unichr(i) for i in xrange(maxunicode))))
     # String geocode and reverse geocode operations provided by Nominatim
     TYPICAL_GEOCODE_QUERY = "geocode"
     TYPICAL_GEOCODE_SCRIPT = "search.php?"
@@ -106,15 +109,23 @@ class NominatimMixin(object):
                 else:
                     return {field: params[field] for field in keyset}
 
+        if any(cls.NS.intersection(value) for value in query.itervalues()):
+            left2right = 0
+        else:
+            left2right = 1
+
         if attempt > 0:
             if juggle:
                 attempt += 1
-                if attempt % 2:
+                if attempt % 2 == left2right:
                     cut = slice(int(attempt // 2), None, None)
                 else:
                     cut = slice(None, -int(attempt // 2), None)
             else:
-                cut = slice(int(attempt), None, None)
+                if left2right:
+                    cut = slice(int(attempt), None, None)
+                else:
+                    cut = slice(None, -int(attempt), None)
         else:
             cut = slice(None, None, None)
 
