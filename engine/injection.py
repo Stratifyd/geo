@@ -12,7 +12,8 @@ from time import sleep
 from traceback import format_exc
 from urllib import urlencode
 
-__all__ = ('NominatimMixin', 'MaxmindMixin', 'PhoneNumberMixin')
+__all__ = ('NominatimMixin', 'MaxmindMixin',
+           'PhoneNumberMixin', 'PostalCodeMixin')
 
 
 class NominatimMixin(object):
@@ -47,6 +48,7 @@ class NominatimMixin(object):
     BLACKLIST_PHRASES = frozenset([
         "other", "n/a", "none", "unknown", "nowhere",
         u'\u6d77\u5916', u'\u5176\u4ed6', u'\u5176\u5b83'])
+    __slots__ = ()  # This class simply stores methods, no __dict__ needed.
 
     @staticmethod
     def __urlencode_query(params):
@@ -182,6 +184,8 @@ class MaxmindMixin(object):
             cls.MAXMIND = Reader(configuration.getMaxMindSource())
         return cls.MAXMIND
 
+    __slots__ = ()  # This class simply stores methods, no __dict__ needed.
+
     def get_ip_address(self, query, attempt=0):
         try:
             return query[self.IP_ADDRESS_QUERY][attempt]
@@ -224,6 +228,18 @@ class MaxmindMixin(object):
         }
 
 
+class PostalCodeMixin(object):
+    # Postal code lookup currently augmented via ad-hoc lookup guesswork
+    POSTAL_CODE_QUERY = "postalcode"
+    __slots__ = ()  # This class simply stores methods, no __dict__ needed.
+
+    def get_postalcode(self, query, attempt=0):
+        pass
+
+    def res_postalcode(self, query, errors):
+        pass
+
+
 class PhoneNumberMixin(object):
     # Phone number lookup currently provided by ad-hoc area code guesswork
     PHONE_NUMBER_QUERY = "phone_number"
@@ -242,6 +258,8 @@ class PhoneNumberMixin(object):
                 pass
             if found:
                 break
+
+    __slots__ = ('_numbers', '_matched')
 
     def get_phone_number(self, query, attempt=0):
         if not hasattr(self, '_numbers'):

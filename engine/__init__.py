@@ -18,7 +18,8 @@ from sys import stdout, maxunicode
 from ta_common.field_names import DF, RO, MC, ENV
 from ta_common.geo.centroid import countries, regions, phones
 from ta_common.geo.mapping import (countries as country_names,
-                                   regions as region_names, phone_codes)
+                                   regions as region_names,
+                                   phone_codes)
 from time import time, sleep
 from traceback import format_exc
 from unicodedata import normalize

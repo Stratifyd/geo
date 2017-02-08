@@ -1,6 +1,6 @@
 from bisect import bisect_left
 from cPickle import loads as cloads, dumps as cdumps
-from collections import deque, OrderedDict
+from collections import deque, Counter, OrderedDict
 from itertools import product, imap
 from marshal import loads as mloads, dumps as mdumps
 from math import log, radians, sin, cos, atan2, sqrt
@@ -756,3 +756,103 @@ class GeoTree(object):
     def find_exact_nearest(self, latitude, longitude):
         return self.__tree.find_nearest_by_function(
             self.geo_curve(latitude, longitude), fxn=self.__haversine)
+
+
+class LengthAwareNode(object):
+    __slots__ = ('_', 't')
+
+    def __init__(self):
+        self._ = dict()
+        self.t = None
+
+    def del_terminal(self):
+        self.t = None
+
+    def set_terminal(self, item):
+        self.t = item
+
+    def has_terminal(self):
+        return self.t is not None
+
+    def get_terminal(self):
+        if self.has_terminal():
+            return self.t
+        else:
+            return Counter(self.itervalues()).most_common(1)[0][0]
+
+    def iterkeys(self):
+        return self.__iter__()
+
+    def keys(self):
+        return list(self.iterkeys())
+
+    def itervalues(self):
+        if self.has_terminal():
+            yield self.t
+        for node in self._.itervalues():
+            for term in node.itervalues():
+                yield term
+
+    def values(self):
+        return list(self.itervalues())
+
+    def iteritems(self):
+        if self.has_terminal():
+            yield '', self.t
+        for char, node in self._.iteritems():
+            for cont, term in node.iteritems():
+                yield char + cont, term
+
+    def items(self):
+        return list(self.iteritems())
+
+    def __iter__(self):
+        if self.has_terminal():
+            yield ''
+        for char, node in self._.iteritems():
+            for cont in node:
+                yield char + cont
+
+    def __delitem__(self, path):
+        start, remain = path[0], path[1:]
+        if remain:
+            del self._[start][remain]
+        else:
+            self.del_terminal()
+
+    def __getitem__(self, path):
+        start, remain = path[0], path[1:]
+        if start in self._:
+            if remain:
+                return self._[start][remain]
+            else:
+                return self._[start].get_terminal()
+        else:
+            return self.get_terminal()
+
+    def __setitem__(self, path, item):
+        start, remain = path[0], path[1:]
+        if start not in self._:
+            self._[start] = LengthAwareNode()
+        if remain:
+            self._[start][remain] = item
+        else:
+            self._[start].set_terminal(item)
+
+
+class LengthAwareTrie(object):
+
+    def __init__(self):
+        self._ = dict()
+
+    def __delitem__(self, path):
+        del self._[len(path)][path]
+
+    def __getitem__(self, path):
+        return self._[len(path)][path]
+
+    def __setitem__(self, path, item):
+        plen = len(path)
+        if plen not in self._:
+            self._[plen] = LengthAwareNode()
+        self._[plen][path] = item

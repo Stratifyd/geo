@@ -22,6 +22,25 @@
   @requires: python 2.7.10
 """
 
+from collections import Container
+from helpers import GeoTree
+from json import load, loads, dump, dumps
+from math import ceil, log10
+from operator import itemgetter
+from os import remove
+from os.path import exists, isfile
+from pymongo import CursorType
+from pymongo.collection import Collection
+from requests import get as r_get
+from sh import Command
+from ta_common.field_names import RO, MC
+from ta_common.geo.mapping import (
+    countries as COUNTRY_MAPPING, regions as REGION_MAPPING,
+    phone_codes as PHONE_MAPPING, postal_codes as POSTAL_MAPPING)
+from ta_common.mango.relational_object import mutabledotdict
+from time import time
+from traceback import format_exc
+
 try:
     from cfuzzyset import cFuzzySet
 
@@ -56,24 +75,6 @@ try:
             self.__map[key] = val
 except:
     FuzzyMapping = None
-from collections import Container
-from helpers import GeoTree
-from json import load, loads, dump, dumps
-from math import ceil, log10
-from operator import itemgetter
-from os import remove
-from os.path import exists, isfile
-from pymongo import CursorType
-from pymongo.collection import Collection
-from requests import get as r_get
-from sh import Command
-from ta_common.field_names import RO, MC
-from ta_common.geo.mapping import (countries as COUNTRY_MAPPING,
-                                   regions as REGION_MAPPING,
-                                   phone_codes as PHONE_MAPPING)
-from ta_common.mango.relational_object import mutabledotdict
-from time import time
-from traceback import format_exc
 
 try:
     from osgeo.ogr import CreateGeometryFromJson, Geometry, wkbPoint
