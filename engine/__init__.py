@@ -185,7 +185,7 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                         if not isinstance(docs, list):
                             docs = [docs]
                         if self._cache and key:
-                            self._key = key
+                            self.__key = key
                         self.__result = docs
                         break
                     else:
