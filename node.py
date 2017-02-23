@@ -211,6 +211,39 @@ if __name__ == '__main__':
     def get_mapping(piston, config, grove):
         return piston.generate_field_mapping(config)
 
+    def run_input(piston, query, type_=None):
+        if type_ is None:
+            type_, query = piston.remap_information({"unknown": [query]})
+
+        for attempt in range(5):
+            geocode = piston.fire(query, type_)
+
+            if query:
+                query = getattr(geocode, "get_%s" % type_)(
+                    query=query, attempt=attempt)
+            else:
+                break
+
+            if not query:
+                break
+
+            result = {}
+            result["raw_query"] = query
+
+            server_response = getattr(
+                geocode, "res_%s" % type_)(query, set())
+            if server_response:
+                result["raw_result"] = server_response[0]
+            else:
+                result["raw_result"] = None
+
+            if geocode.result:
+                result["geo_result"] = geocode.result[0]
+            else:
+                result["geo_result"] = None
+
+            yield attempt, result, query
+
     def get_example(piston, config, grove):
         mapping = get_mapping(piston, config, grove)
         examples = []
@@ -237,31 +270,8 @@ if __name__ == '__main__':
                 continue
 
             examples.append({"input": query, "type": type_, "_id": doc["_id"]})
-            for attempt in range(5):
-                geocode = piston.fire(query, type_)
-
-                if query:
-                    query = getattr(geocode, "get_%s" % type_)(
-                        query=query, attempt=attempt)
-                else:
-                    break
-
-                if not query:
-                    break
-                example = examples[-1].setdefault(str(attempt), {})
-                example["raw_query"] = query
-
-                server_response = getattr(
-                    geocode, "res_%s" % type_)(query, set())
-                if server_response:
-                    example["raw_result"] = server_response[0]
-                else:
-                    example["raw_result"] = None
-
-                if geocode.result:
-                    example["geo_result"] = geocode.result[0]
-                else:
-                    example["geo_result"] = None
+            for attempt, result, _ in run_input(piston, query, type_):
+                examples[-1].setdefault(str(attempt), {}).update(result)
 
         return examples
 
@@ -270,6 +280,10 @@ if __name__ == '__main__':
 
     from sys import argv
     _script, subdomain, job_info, run_type = argv[:4]
+    if len(argv) > 4:
+        extra = ' '.join(argv[4:]).decode('utf-8')
+    else:
+        extra = ''
     subdomain = subdomain.lower()
     job_info = job_info.lower()
     run_type = run_type.lower()
@@ -303,8 +317,15 @@ if __name__ == '__main__':
         print "Geocodes:"
         get_dense_geocodes(job, grove)
 
-    if 'm' in run_type or 'e' in run_type or 'r' in run_type:
+    if frozenset('tmecr').intersection(run_type):
         nom = Piston.spark(client=grove, configuration=TasteConf())
+        if 't' in run_type:  # display logic for test input
+            print "Testing: '%s'\n" % extra
+            for attempt, result, raw in run_input(nom, extra):
+                print "Result #%d: %s" % (attempt, raw)
+                pprint(result)
+                print
+            print
         if 'm' in run_type:  # print job conf's mapping
             print "Mapping:"
             pprint(get_mapping(nom, job, grove))

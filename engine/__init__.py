@@ -1,6 +1,5 @@
 from collections import Container, Counter, Mapping, OrderedDict
 from itertools import imap
-from jieba import cut as jieba_cut
 from json import loads
 from marshal import loads as load_obj, dumps as dump_obj
 from math import log10
@@ -17,19 +16,19 @@ from requests.exceptions import ConnectionError, Timeout
 from sys import stdout, maxunicode
 from ta_common.field_names import DF, RO, MC, ENV
 from ta_common.geo.centroid import countries, regions, phones
-from ta_common.geo.mapping import (countries as country_names,
-                                   regions as region_names,
-                                   phone_codes)
+from ta_common.geo.mapping import (
+    countries as country_names, regions as region_names, phone_codes)
+from ta_common.text_tools.tokenizer import LanguageTokenizer
 from time import time, sleep
 from traceback import format_exc
 from unicodedata import normalize
 from urllib import urlencode
 from urlparse import urlparse, parse_qsl
+from v2_tier3_compute_node.geo.engine.injection import (
+    NominatimMixin, MaxmindMixin, PhoneNumberMixin)
 from v2_tier3_compute_node.geo.helpers import LockedIterator, CacheDictionary
 from v2_tier3_compute_node.geo.mapping import CentroidUpdateHelper
 from warnings import warn
-from v2_tier3_compute_node.geo.engine.injection import (
-    NominatimMixin, MaxmindMixin, PhoneNumberMixin)
 
 
 class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
@@ -312,7 +311,7 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
 
 
 class Piston(object):
-
+    LANGUAGE_TOKENIZER = None
     OPTION_PRIORITY_ORDER = (
         ("phone_number", PhoneNumberMixin.PHONE_NUMBER_QUERY),
         ("ip_address", MaxmindMixin.IP_ADDRESS_QUERY),
@@ -329,6 +328,16 @@ class Piston(object):
     LEGAL_CONFIGURATION_OPTIONS = tuple(
         option for option, _ in OPTION_PRIORITY_ORDER
     ) + ("longitude", "unknown")
+
+    @classmethod
+    def _get_class_tokenizer(cls):
+        if cls.LANGUAGE_TOKENIZER is None:
+            cls.LANGUAGE_TOKENIZER = LanguageTokenizer()
+        return cls.LANGUAGE_TOKENIZER
+
+    @property
+    def tokenizer(self):
+        return self._get_class_tokenizer()
 
     @property
     def state(self):
@@ -421,8 +430,8 @@ class Piston(object):
             information[field_type] = normalize('NFKC', u' '.join(
                 filter(None, (p.strip() for p in information[field_type]))))
             if self.NS.intersection(information[field_type]):
-                information[field_type] = u' '.join(
-                    part.strip() for part in jieba_cut(information[field_type]))
+                information[field_type] = (
+                    self.tokenizer.zh(information[field_type]))
             information[field_type] = self.HC.get(
                 information[field_type], information[field_type])
 
