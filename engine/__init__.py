@@ -346,7 +346,7 @@ class Piston(object):
 
     @property
     def processed(self):
-        return self.processed.value
+        return self.__processed.value
 
     @classmethod
     def spark(cls, directory='/', client=Ellipsis, configuration=None,
