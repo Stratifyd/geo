@@ -26,6 +26,7 @@ from ta_common.field_names import ENV, MC, JS
 from time import time
 from v2_ta_common.process_node import ProcessNode
 from v2_tier3_compute_node.geo.engine import Engine, Piston
+import sys
 
 
 class GeoLookup(ProcessNode):
@@ -48,6 +49,7 @@ class GeoLookup(ProcessNode):
         self.engine = Piston.spark(client=self.mongo_helper,
                                    configuration=self.taste_conf)
         print "Initialization required %f seconds." % (time() - start)
+        print "Geocoding against %s." % self.taste_conf.getNominatimHost()
 
     def define_aws_queues(self):
         return [self.taste_conf.getTier3GeoSQSQueue(),
@@ -65,10 +67,14 @@ class GeoLookup(ProcessNode):
         return 180 + self.job_configuration.meta.counts.total * 0.1
 
     def run_process(self):
+        if getattr(sys, 'frozen', False):
+            verbose = True
+        else:
+            verbose = ENV.get(ENV.VERBOSE, as_type=int)
         if self.job_configuration.params.geo_index:
             self.engine.process(config=self.job_configuration,
                                 subdomain=self.job_configuration.mongo_db,
-                                verbose=ENV.get(ENV.VERBOSE, as_type=int))
+                                verbose=verbose)
 
     def state(self):
         return {'processed_docs': self.engine.processed}

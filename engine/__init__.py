@@ -714,7 +714,7 @@ class Piston(object):
         for _id, geo in pool.imap_unordered(self.__process, locked):
             # for _id, geo in imap(self.__process, locked):
             locked -= 1
-            if verbose and (time() - last) > 0.5:
+            if verbose and (time() - last) > 1.0:
                 self.report_status(len(locked), runtime)
                 last = time()
             if not _id:
