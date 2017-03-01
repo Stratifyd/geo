@@ -385,6 +385,8 @@ class Piston(object):
                 configuration['_phone_geocode'] = phone_geocode
             kwargs.update(configuration)
             return cls(client, nominatim_host, **kwargs)
+        raise ValueError("Cannot initialize geo.engine.Piston without "
+                         "country and region geocode mappings.")
 
     @classmethod
     def generate_field_mapping(cls, config):
