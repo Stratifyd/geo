@@ -282,7 +282,7 @@ if __name__ == '__main__':
         return examples
 
     def rerun_job(piston, config, grove, verbose=True):
-        piston.process(config=config, verbose=verbose, subdomain=Ellipsis)
+        piston.process(config=config, verbose=verbose, subdomain=None)
 
     from sys import argv
     _script, subdomain, job_info, run_type = argv[:4]

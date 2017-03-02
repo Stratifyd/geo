@@ -30,7 +30,7 @@ class LockedIterator(object):
         return self
 
     def __len__(self):
-        return max(self.__seen, 0)
+        return max(0, self.__seen)
 
     def __iter__(self):
         while True:

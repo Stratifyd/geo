@@ -55,9 +55,10 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
     def _fetch(url, **kwargs):
         return r_get(url, **kwargs).content
 
-    __slots__ = ('_ns', '__key', '_type', '_assoc', '_cache', '__calls', 'exc',
-                 '_debug', '_query', '__cached', '__result', '_minimum', 'fxn',
-                 '_maximum', '_sleep', 'arguments', 'get_query', 'res_query')
+    __slots__ = ('__cached', '__calls', '__key', '__result', '_assoc',
+                 '_cache', '_debug', '_maximum', '_minimum', '_ns', '_print',
+                 '_query', '_sleep', '_type', 'arguments', 'exc', 'fxn',
+                 'get_query', 'res_query')
 
     def __init__(self, host, query, assoc, search_type, _fetch_function=_fetch,
                  _catch_exceptions=(), _sleep=0.0, **kwargs):
@@ -68,6 +69,7 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
         self._cache = kwargs.pop('cache', None)
         self.__calls = 0
         self._debug = kwargs.pop('debug', False)
+        self._print = kwargs.pop('verbose', False)
         self._sleep = (_sleep if hasattr(_sleep, 'value')
                        else Value('f', _sleep))
         if hasattr(_fetch_function, '__call__'):
@@ -125,11 +127,15 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
         key = ''
         errors = set()
         mirror = set()
+        loop_iter = -1
 
         if self.__result is None:
             self.__result = []
 
-            while not self.__result and self.__calls < self.MAXIMUM_ATTEMPTS:
+            # while not self.__result and self.__calls < self.MAXIMUM_ATTEMPTS:
+            for loop_iter in xrange(self.MAXIMUM_ATTEMPTS):
+                if self.__result:
+                    break
                 try:
                     query = self.get_query(self._query, self.__calls)
                     if query is None:
@@ -168,15 +174,15 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                             errors.remove(type(err))
                         else:
                             errors.add(type(err))
-                        if self._debug:
-                            stdout.write("\nEncountered expected %s error!\n%s"
+                        if self._print:
+                            stdout.write("\nEncountered expected %s error.\n%s"
                                          % (self._type, format_exc()))
                         sleep(self._sleep.value)
                     except:
                         with self._sleep.get_lock():
                             self._sleep.value = max(self._maximum,
                                                     self._sleep.value * 1.05)
-                        if self._debug:
+                        if self._print:
                             stdout.write("\nEncountered unknown %s error!\n%s"
                                          % (self._type, format_exc()))
                         docs = None
@@ -192,7 +198,7 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                             mirror.add(key)
                 except:
                     self.__calls += 1
-                    if self._debug:
+                    if self._print:
                         stdout.write("\nEncountered unknown global error!\n%s"
                                      % format_exc())
                     sleep(self._sleep.value)
@@ -206,11 +212,14 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                     for alt in mirror:
                         self._cache.register_alternate(key, alt)
             except:
-                if self._debug:
-                    stdout.write("\nEncountered issue with normalization!\n%s"
+                if self._print:
+                    stdout.write("\nEncountered error with normalization!\n%s"
                                  % format_exc())
                 self.__result = []
 
+        if self._print and (loop_iter + 1) == self.MAXIMUM_ATTEMPTS:
+            stdout.write("\nQuery exhausted all geocode attempts:\n%s\n"
+                         % self._query)
         if isinstance(self.__result, list) and len(self.__result) > 0:
             return self.__result
         else:
@@ -757,6 +766,8 @@ class Piston(object):
                       assoc=self.__map,
                       cache=self.__cache,
                       search_type=type_,
+                      verbose=True,
+                      _debug=False,
                       _fetch_function=self.session_fetch_function,
                       _catch_exceptions=(ConnectionError, Timeout),
                       _sleep=self.__sleep)
