@@ -127,15 +127,11 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
         key = ''
         errors = set()
         mirror = set()
-        loop_iter = -1
 
         if self.__result is None:
             self.__result = []
 
-            # while not self.__result and self.__calls < self.MAXIMUM_ATTEMPTS:
-            for loop_iter in xrange(self.MAXIMUM_ATTEMPTS):
-                if self.__result:
-                    break
+            while not self.__result and self.__calls < self.MAXIMUM_ATTEMPTS:
                 try:
                     query = self.get_query(self._query, self.__calls)
                     if query is None:
@@ -217,7 +213,7 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                                  % format_exc())
                 self.__result = []
 
-        if self._print and (loop_iter + 1) == self.MAXIMUM_ATTEMPTS:
+        if self._print and (self.__calls + 1) == self.MAXIMUM_ATTEMPTS:
             stdout.write("\nQuery exhausted all geocode attempts:\n%s\n"
                          % self._query)
         if isinstance(self.__result, list) and len(self.__result) > 0:
