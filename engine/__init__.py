@@ -19,6 +19,7 @@ from ta_common.geo.centroid import countries, regions, phones
 from ta_common.geo.mapping import (
     countries as country_names, regions as region_names, phone_codes)
 from ta_common.text_tools.tokenizer import LanguageTokenizer
+from threading import Lock
 from time import time, sleep
 from traceback import format_exc
 from unicodedata import normalize
@@ -316,7 +317,6 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
 
 
 class Piston(object):
-    LANGUAGE_TOKENIZER = None
     OPTION_PRIORITY_ORDER = (
         ("phone_number", PhoneNumberMixin.PHONE_NUMBER_QUERY),
         ("ip_address", MaxmindMixin.IP_ADDRESS_QUERY),
@@ -333,16 +333,6 @@ class Piston(object):
     LEGAL_CONFIGURATION_OPTIONS = tuple(
         option for option, _ in OPTION_PRIORITY_ORDER
     ) + ("longitude", "unknown")
-
-    @classmethod
-    def _get_class_tokenizer(cls):
-        if cls.LANGUAGE_TOKENIZER is None:
-            cls.LANGUAGE_TOKENIZER = LanguageTokenizer()
-        return cls.LANGUAGE_TOKENIZER
-
-    @property
-    def tokenizer(self):
-        return self._get_class_tokenizer()
 
     @property
     def state(self):
@@ -437,8 +427,9 @@ class Piston(object):
             information[field_type] = normalize('NFKC', u' '.join(
                 filter(None, (p.strip() for p in information[field_type]))))
             if self.NS.intersection(information[field_type]):
-                information[field_type] = (
-                    self.tokenizer.zh(information[field_type]))
+                with self.tokenlock:
+                    information[field_type] = (
+                        self.tokenizer.zh(information[field_type]))
             information[field_type] = self.HC.get(
                 information[field_type], information[field_type])
 
@@ -617,6 +608,8 @@ class Piston(object):
                                 pool_block=True))
         self.__processed = Value('i', 0, lock=False)
         self.__sleep = Value('f', 0.0, lock=True)
+        self.tokenlock = Lock()
+        self.tokenizer = LanguageTokenizer()
         self.concurrent = kwargs.get('concurrent', 4)
 
     def session_fetch_function(self, url, **kwargs):
@@ -802,6 +795,7 @@ class Piston(object):
 
             return _id, result
         except:
+            print format_exc()
             return None, {}
 
 

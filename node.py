@@ -143,7 +143,7 @@ if __name__ == '__main__':
         print "Regions"
         print tabulate(r_tab, headers=headr)
 
-    def get_dense_geocodes(config, grove):
+    def get_dense_geocodes(config, grove, full=True):
         from collections import Mapping
         from operator import itemgetter
         from tabulate import tabulate
@@ -165,10 +165,13 @@ if __name__ == '__main__':
             "_id": {field: "$" + field for field in fields},
             "_geo_c": {"$addToSet": "$_geo.code.country_name"},
             "_geo_r": {"$addToSet": "$_geo.code.region_name"},
-            "_count": {"$sum": 1},
-            "_found": {"$addToSet": "$_geo.full"}
+            "_count": {"$sum": 1}
         }
-        headr = ["geocode", "count", "input", "location"]
+        if full:
+            aggregation["_found"] = {"$addToSet": "$_geo.full"}
+        headr = ["geocode", "count", "input"]
+        if full:
+            headr.append("location")
         table = []
 
         for doc in collection.aggregate(
@@ -204,13 +207,22 @@ if __name__ == '__main__':
             else:
                 geo = "<no geocode>"
 
-            table.append((
-                geo,
-                doc["_count"],
-                u", ".join(filter(None, (doc["_id"].get(field).strip()
-                                         for field in fields))
-                           ) or "<no input>",
-                u" | ".join(filter(None, doc["_found"])) or "<no location>"))
+            if full:
+                table.append((
+                    geo,
+                    doc["_count"],
+                    u", ".join(filter(None, (doc["_id"].get(field).strip()
+                                             for field in fields))
+                               ) or "<no input>",
+                    u" | ".join(filter(None, doc["_found"])) or "<no location>")
+                )
+            else:
+                table.append((
+                    geo,
+                    doc["_count"],
+                    u", ".join(filter(None, (doc["_id"].get(field).strip()
+                                             for field in fields))
+                               ) or "<no input>"))
 
         print tabulate(table, headers=headr)
 
@@ -282,7 +294,7 @@ if __name__ == '__main__':
         return examples
 
     def rerun_job(piston, config, grove, verbose=True):
-        piston.process(config=config, verbose=verbose, subdomain=None)
+        piston.process(config=config, verbose=verbose, subdomain=Ellipsis)
 
     from sys import argv
     _script, subdomain, job_info, run_type = argv[:4]
@@ -321,7 +333,7 @@ if __name__ == '__main__':
 
     if 'd' in run_type:  # Check table result
         print "Geocodes:"
-        get_dense_geocodes(job, grove)
+        get_dense_geocodes(job, grove, full=('dd' in run_type))
 
     if frozenset('tmecr').intersection(run_type):
         nom = Piston.spark(client=grove, configuration=TasteConf())
