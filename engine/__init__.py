@@ -19,7 +19,6 @@ from ta_common.geo.centroid import countries, regions, phones
 from ta_common.geo.mapping import (
     countries as country_names, regions as region_names, phone_codes)
 from ta_common.text_tools.tokenizer import LanguageTokenizer
-from threading import Lock
 from time import time, sleep
 from traceback import format_exc
 from unicodedata import normalize
@@ -427,9 +426,8 @@ class Piston(object):
             information[field_type] = normalize('NFKC', u' '.join(
                 filter(None, (p.strip() for p in information[field_type]))))
             if self.NS.intersection(information[field_type]):
-                with self.tokenlock:
-                    information[field_type] = (
-                        self.tokenizer.zh(information[field_type]))
+                information[field_type] = self.tokenizer(
+                    'zh', information[field_type])
             information[field_type] = self.HC.get(
                 information[field_type], information[field_type])
 
@@ -608,8 +606,7 @@ class Piston(object):
                                 pool_block=True))
         self.__processed = Value('i', 0, lock=False)
         self.__sleep = Value('f', 0.0, lock=True)
-        self.tokenlock = Lock()
-        self.tokenizer = LanguageTokenizer()
+        self.tokenizer = LanguageTokenizer(concurrent=True)
         self.concurrent = kwargs.get('concurrent', 4)
 
     def session_fetch_function(self, url, **kwargs):
