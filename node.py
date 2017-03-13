@@ -72,9 +72,12 @@ class GeoLookup(ProcessNode):
         else:
             verbose = ENV.get(ENV.VERBOSE, as_type=int)
         if self.job_configuration.params.geo_index:
-            self.engine.process(config=self.job_configuration,
-                                subdomain=self.job_configuration.mongo_db,
-                                verbose=verbose)
+            for err in self.engine.iterprocess(
+                    config=self.job_configuration,
+                    subdomain=self.job_configuration.mongo_db,
+                    verbose=verbose):
+                if err is not None and isinstance(err, basestring):
+                    self.warning(err)
 
     def state(self):
         return {'processed_docs': self.engine.processed}

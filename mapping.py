@@ -275,7 +275,7 @@ class CentroidUpdateHelper(object):
         country = cls.regenerate_country_geocode(nominatim_host, verbose)
         country = {
             code: {
-                'geojson': Mapping(Shape(geo['geojson']).simplify(0.001)),
+                'geojson': Mapping(Shape(geo['geojson']).simplify(0.005)),
                 'display_name': geo['display_name'],
                 'namedetails': geo.get('namedetails', {})
             }
@@ -295,7 +295,7 @@ class CentroidUpdateHelper(object):
         regions = {
             ccode: {
                 rcode: {
-                    'geojson': Mapping(Shape(geo['geojson']).simplify(0.002)),
+                    'geojson': Mapping(Shape(geo['geojson']).simplify(0.01)),
                     'display_name': geo['display_name'],
                     'namedetails': geo.get('namedetails', {})
                 }

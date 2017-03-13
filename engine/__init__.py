@@ -424,7 +424,8 @@ class Piston(object):
     def remap_information(self, information):
         for field_type in information.iterkeys():
             information[field_type] = normalize('NFKC', u' '.join(
-                filter(None, (p.strip() for p in information[field_type]))))
+                filter(None, (p.strip() if isinstance(p, basestring) else ''
+                              for p in information[field_type]))))
             if self.NS.intersection(information[field_type]):
                 information[field_type] = self.tokenizer(
                     'zh', information[field_type])
@@ -706,17 +707,18 @@ class Piston(object):
             self.report_status(len(locked), runtime)
             last = time()
 
-        for _id, geo in pool.imap_unordered(self.__process, locked):
-            # for _id, geo in imap(self.__process, locked):
+        for _id, geo, err in pool.imap_unordered(self.__process, locked):
+            # for _id, geo, err in imap(self.__process, locked):
             locked -= 1
             if verbose and (time() - last) > 1.0:
                 self.report_status(len(locked), runtime)
                 last = time()
-            if not _id:
+            if not _id or err is not None:
+                yield err
                 continue
             bulk.find({RO.OBJECT_ID: _id}).update_one({'$set': {DF.geo: geo}})
             self.__processed.value += 1
-            yield geo
+            yield None
 
         if verbose:
             self.report_status(len(locked), runtime)
@@ -743,6 +745,7 @@ class Piston(object):
             if verbose:
                 stdout.write("[% 9.3f] Bulk update of mongo cache complete.\n"
                              % (time() - runtime))
+        yield None
 
     def fire(self, query, type_=None):
         if type_ is None:
@@ -790,10 +793,9 @@ class Piston(object):
             else:
                 result = {}
 
-            return _id, result
+            return _id, result, None
         except:
-            print format_exc()
-            return None, {}
+            return None, {}, format_exc()
 
 
 class Engine(object):
