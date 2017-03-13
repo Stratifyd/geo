@@ -61,7 +61,7 @@ class NominatimMixin(object):
             return loads(body.strip())
         except:
             if "DB Error" in body:
-                self._calls -= 1
+                self.calls -= 1
                 wait = self._sleep.value * 10
                 if self._debug:
                     stdout.write(
@@ -69,7 +69,7 @@ class NominatimMixin(object):
                         "error. Sleeping for %.2f seconds."
                         "\nBad Request: %s\n" % (wait, query))
                 if "DB Error" in errors:
-                    self._calls += 1
+                    self.calls += 1
                     errors.remove("DB Error")
                 else:
                     errors.add("DB Error")

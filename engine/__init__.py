@@ -19,6 +19,7 @@ from ta_common.geo.centroid import countries, regions, phones
 from ta_common.geo.mapping import (
     countries as country_names, regions as region_names, phone_codes)
 from ta_common.text_tools.tokenizer import LanguageTokenizer
+from threading import current_thread
 from time import time, sleep
 from traceback import format_exc
 from unicodedata import normalize
@@ -110,6 +111,11 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
             self.result
         return self.__calls
 
+    @calls.setter
+    def calls(self, value):
+        if isinstance(value, int) and -1 < value < self.MAXIMUM_ATTEMPTS:
+            self.__calls = value
+
     @property
     def call_was_cached(self):
         if self.__result is None:
@@ -160,8 +166,9 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                         self.__calls += 1
                         docs = self.res_query(query, errors)
                         with self._sleep.get_lock():
-                            self._sleep.value = max(self._minimum,
-                                                    self._sleep.value * 0.99)
+                            self._sleep.value = max(
+                                self._minimum,
+                                self._sleep.value * 0.999)
                     except self.exc as err:
                         self.__calls -= 1
                         docs = None
@@ -173,11 +180,16 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                         if self._print:
                             stdout.write("\nEncountered expected %s error.\n%s"
                                          % (self._type, format_exc()))
+                        with self._sleep.get_lock():
+                            self._sleep.value = min(
+                                self._maximum,
+                                self._sleep.value + 0.05)
                         sleep(self._sleep.value)
                     except:
                         with self._sleep.get_lock():
-                            self._sleep.value = max(self._maximum,
-                                                    self._sleep.value * 1.05)
+                            self._sleep.value = min(
+                                self._maximum,
+                                max(self._sleep.value, 0.05) * 2.5)
                         if self._print:
                             stdout.write("\nEncountered unknown %s error!\n%s"
                                          % (self._type, format_exc()))
@@ -213,9 +225,9 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                                  % format_exc())
                 self.__result = []
 
-        if self._print and (self.__calls + 1) == self.MAXIMUM_ATTEMPTS:
-            stdout.write("\nQuery exhausted all geocode attempts:\n%s\n"
-                         % self._query)
+            if self._print and (self.__calls + 1) == self.MAXIMUM_ATTEMPTS:
+                stdout.write("\nQuery exhausted all attempts [%s]: %s\n"
+                             % (current_thread().ident, self._query))
         if isinstance(self.__result, list) and len(self.__result) > 0:
             return self.__result
         else:
