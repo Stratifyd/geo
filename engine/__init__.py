@@ -684,13 +684,13 @@ class Piston(object):
     def iterprocess(self, config, subdomain=None, pool_size=4, verbose=False):
         if verbose:
             runtime = time()
-        self.__processed = Value('i', 0, lock=False)
-        self.HITS = Value('i', 0, lock=False)
-        self.MISS = Value('i', 0, lock=False)
-        self.CONT = Value('i', 0, lock=False)
-        self.CODE = Value('i', 0, lock=False)
-        self.FUZZ = Value('i', 0, lock=False)
-        self.NULL = Value('i', 0, lock=False)
+        self.__processed = Value('i', 0, lock=True)
+        self.HITS = Value('i', 0, lock=True)
+        self.MISS = Value('i', 0, lock=True)
+        self.CONT = Value('i', 0, lock=True)
+        self.CODE = Value('i', 0, lock=True)
+        self.FUZZ = Value('i', 0, lock=True)
+        self.NULL = Value('i', 0, lock=True)
 
         subdomain = config['mongo_db'] if subdomain is None else subdomain
         if subdomain is Ellipsis:
@@ -782,11 +782,14 @@ class Piston(object):
                 geocode = self.fire(query, type_)
 
                 if geocode.call_was_cached:
-                    self.HITS.value += 1
+                    with self.HITS.get_lock():
+                        self.HITS.value += 1
                     self.__used.add(geocode.cache_key)
                 else:
-                    self.MISS.value += 1
-                self.CONT.value += geocode.calls
+                    with self.MISS.get_lock():
+                        self.MISS.value += 1
+                with self.CONT.get_lock():
+                    self.CONT.value += geocode.calls
 
                 if geocode.result:
                     result = geocode.result[0]
@@ -794,12 +797,15 @@ class Piston(object):
                     result = {}
 
                 if result.get('id') > 0 or result.get('full'):
-                    self.CODE.value += 1
+                    with self.CODE.get_lock():
+                        self.CODE.value += 1
 
                 if result.get('code', {}).get('country'):
-                    self.FUZZ.value += 1
+                    with self.FUZZ.get_lock():
+                        self.FUZZ.value += 1
                 else:
-                    self.NULL.value += 1
+                    with self.NULL.get_lock():
+                        self.NULL.value += 1
 
                 result['orig'] = query.get('orig', '')
             else:

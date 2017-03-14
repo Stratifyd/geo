@@ -16,6 +16,26 @@ __all__ = ('NominatimMixin', 'MaxmindMixin',
            'PhoneNumberMixin', 'PostalCodeMixin')
 
 
+class NominatimResponseError(StandardError):
+
+    def __init__(self, querystring, responsebody, message=""):
+        self.q = querystring
+        self.b = responsebody
+        if isinstance(message, unicode):
+            self.m = message.encode('utf-8', 'ignore')
+        else:
+            self.m = str(message)
+
+    def __repr__(self):
+        return ("NominatimResponseError:" +
+                "\n  Submitted Query: " + self.q +
+                "\n  Response Body:\n " + self.b.replace("\n", "\n    ") +
+                "\n" + self.m)
+
+    def __str__(self):
+        return repr(self)
+
+
 class NominatimMixin(object):
     NS = regex_compile(r'[\p{script=Han}\p{script=Tibetan}\p{script=Lao}'
                        r'\p{script=Thai}\p{script=Khmer}]', regex_U)
@@ -87,7 +107,8 @@ class NominatimMixin(object):
                         "\nBad Request: %s\n"
                         % (body, format_exc(), query))
                 sleep(self._sleep.value)
-            raise
+            raise NominatimResponseError(
+                query, body, "Response was not legal JSON.")
 
     @classmethod
     def get_geocode(cls, query, attempt=0, juggle=False):
