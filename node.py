@@ -339,7 +339,10 @@ if __name__ == '__main__':
         get_dense_geocodes(job, grove, full=('dd' in run_type))
 
     if frozenset('tmecr').intersection(run_type):
-        nom = Piston.spark(client=grove, configuration=TasteConf())
+        nom = Piston.spark(
+            client=grove,
+            configuration=TasteConf(),
+            nominatim_host='http://nominatim-2055075411.cn-north-1.elb.amazonaws.com.cn/')
         if 't' in run_type:  # display logic for test input
             print "Testing: '%s'\n" % extra
             for attempt, result, raw in run_input(nom, extra):

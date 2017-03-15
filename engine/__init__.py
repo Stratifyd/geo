@@ -27,7 +27,7 @@ from urllib import urlencode
 from urlparse import urlparse, parse_qsl
 from v2_tier3_compute_node.geo.engine.injection import (
     NominatimMixin, MaxmindMixin, PhoneNumberMixin)
-from v2_tier3_compute_node.geo.helpers import LockedIterator, CacheDictionary
+from v2_tier3_compute_node.geo.helpers import CacheDictionary, LockedIterator
 from v2_tier3_compute_node.geo.mapping import CentroidUpdateHelper
 from warnings import warn
 
@@ -152,14 +152,14 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                                 {self._type: query})
                         if key in self._cache:
                             if self._debug:
-                                stdout.write("Query #%d: '%s' (Cached)\n"
+                                stdout.write("\nQuery #%d: '%s' (Cached)\n"
                                              % (self.__calls + 1, query))
                             self.__cached = True
                             self.__result = self._cache[key]
                             break
 
                     if self._debug:
-                        stdout.write("Query #%d: '%s'\n"
+                        stdout.write("\nQuery #%d: '%s'\n"
                                      % (self.__calls + 1, query))
 
                     try:
@@ -194,6 +194,7 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                             stdout.write("\nEncountered unknown %s error!\n%s"
                                          % (self._type, format_exc()))
                         docs = None
+                        sleep(self._sleep.value)
                     if docs:
                         if not isinstance(docs, list):
                             docs = [docs]
@@ -278,7 +279,7 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                 latitude=latitude, longitude=longitude,
                 country_strings=country_args, region_strings=region_args)
 
-            country_code = country_code.upper()
+            country_code = country_code.upper() if country_code else None
             region_code = region_code.upper() if region_code else None
             if not region_code or any(country_args) and not any(region_args):
                 longitude, latitude = countries.get(
@@ -356,8 +357,7 @@ class Piston(object):
 
     @classmethod
     def spark(cls, directory='/', client=Ellipsis, configuration=None,
-              nominatim_host='http://nominatim.openstreetmap.org/',
-              **kwargs):
+              nominatim_host=None, **kwargs):
         country_geocode = None
         region_geocode = None
         phone_geocode = None
@@ -373,7 +373,7 @@ class Piston(object):
                 if country_geocode and region_geocode and phone_geocode:
                     break
         else:
-            nominatim_host = configuration.getNominatimHost()
+            nominatim_host = nominatim_host or configuration.getNominatimHost()
             country_geocode = configuration.getNominatimCountryGeoJSON()
             region_geocode = configuration.getNominatimRegionGeoJSON()
             phone_geocode = configuration.getNominatimPhoneGeoJSON()
@@ -607,6 +607,7 @@ class Piston(object):
             raise TypeError("Nominatim must be started with a MongoClient!")
 
         self.__ns = kwargs['nominatim_host'] = nominatim_host
+        warn("Geocoding against %s." % self.__ns, UserWarning)
         self.__map = CentroidUpdateHelper(**kwargs)
         self.__used = set()
         self.__cache = CacheDictionary(maxsize=kwargs.get('maxsize', 100000),
