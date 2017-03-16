@@ -36,7 +36,6 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
     COUNTRY_KEYS = ("country", "continent")
     REGION_KEYS = ("state", "city", "town", "county",
                    "state_district", "village", "suburb")
-
     MAXIMUM_ATTEMPTS = 5
 
     # The following rely on Nominatim queries
@@ -349,7 +348,8 @@ class Piston(object):
     @property
     def state(self):
         return (self.HITS.value, self.MISS.value, self.CONT.value,
-                self.CODE.value, self.FUZZ.value, self.NULL.value)
+                self.CODE.value, self.FUZZ.value, self.NULL.value,
+                self.FAIL.value)
 
     @property
     def processed(self):
@@ -677,7 +677,7 @@ class Piston(object):
 
                 self.__sleep.value,
                 float(self.HITS.value + self.MISS.value) / (time() - runtime),
-                self.HITS.value + self.MISS.value,
+                self.HITS.value + self.MISS.value + self.FAIL.value,
 
                 locked))
         stdout.flush()
@@ -692,6 +692,7 @@ class Piston(object):
         self.CODE = Value('i', 0, lock=True)
         self.FUZZ = Value('i', 0, lock=True)
         self.NULL = Value('i', 0, lock=True)
+        self.FAIL = Value('i', 0, lock=True)
 
         subdomain = config['mongo_db'] if subdomain is None else subdomain
         if subdomain is Ellipsis:
@@ -723,14 +724,15 @@ class Piston(object):
         for _id, geo, err in pool.imap_unordered(self.__process, locked):
             # for _id, geo, err in imap(self.__process, locked):
             locked -= 1
+            self.__processed.value += 1
             if verbose and (time() - last) > 1.0:
                 self.report_status(len(locked), runtime)
                 last = time()
             if not _id or err is not None:
+                stdout.write('\n%s\n' % err)
                 yield err
                 continue
             bulk.find({RO.OBJECT_ID: _id}).update_one({'$set': {DF.geo: geo}})
-            self.__processed.value += 1
             yield None
 
         if verbose:
@@ -808,19 +810,24 @@ class Piston(object):
                     with self.NULL.get_lock():
                         self.NULL.value += 1
 
-                result['orig'] = query.get('orig', '')
+                if query.get('orig'):
+                    result['orig'] = query['orig']
             else:
+                with self.FAIL.get_lock():
+                    self.FAIL.value += 1
                 result = {}
 
             return _id, result, None
         except:
+            with self.FAIL.get_lock():
+                self.FAIL.value += 1
             return None, {}, format_exc()
 
 
 class Engine(object):
 
     def report_status(self, overall_runtime):
-        hits, miss, cont, code, fuzz, null = (
+        hits, miss, cont, code, fuzz, null, fail = (
             state / len(self) for state in map(
                 sum, zip(piston.state for piston in self)))
         stdout.write("[% 9.3f] %d hits / %d misses / %d calls <--> "
@@ -838,7 +845,7 @@ class Engine(object):
 
                          self.__sleep.value,
                          float(hits + miss) / (time() - overall_runtime),
-                         hits + miss))
+                         hits + miss + fail))
         stdout.flush()
 
     @property
