@@ -708,7 +708,7 @@ class Piston(object):
                              % (time() - runtime))
 
         self._config = self.generate_field_mapping(config)
-        pool = ThreadPool(min(max(int(pool_size), 0), self.concurrent))
+        pool = ThreadPool(min(max(int(pool_size), 1), self.concurrent))
 
         bulk = self.__client[config.mongo_db][
             config.mongo_table].initialize_unordered_bulk_op()

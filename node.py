@@ -342,7 +342,7 @@ if __name__ == '__main__':
         nom = Piston.spark(
             client=grove,
             configuration=TasteConf(),
-            nominatim_host='http://nominatim-2055075411.cn-north-1.elb.amazonaws.com.cn/')
+            nominatim_host='10.0.32.44')
         if 't' in run_type:  # display logic for test input
             print "Testing: '%s'\n" % extra
             for attempt, result, raw in run_input(nom, extra):
