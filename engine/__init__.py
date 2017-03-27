@@ -363,6 +363,9 @@ class Piston(object):
         phone_geocode = None
 
         if configuration is None:
+            if nominatim_host is None:
+                raise ValueError("Cannot run without a configuration and a "
+                                 "known Nominatim host address!")
             for dirname, _dirpath, filenames in walk(directory):
                 if country_geocode is None and 'cgeo.json.xz' in filenames:
                     country_geocode = join(dirname, 'cgeo.json.xz')
