@@ -439,7 +439,7 @@ class Piston(object):
     def remap_information(self, information):
         for field_type in information.iterkeys():
             information[field_type] = normalize('NFKC', u' '.join(
-                filter(None, (p.strip() if isinstance(p, basestring) else ''
+                filter(None, (p.strip() if isinstance(p, basestring) else u''
                               for p in information[field_type]))))
             if self.NS.intersection(information[field_type]):
                 information[field_type] = self.tokenizer(
