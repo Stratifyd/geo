@@ -516,7 +516,7 @@ class Piston(object):
 
         return carry, extra
 
-    CN = regex_compile(r'([\p{L}\p{N}]\P{Z}*[\p{L}\p{N}])', regex_U)
+    CN = regex_compile(r'([\p{L}\p{N}]\P{Z}*[\p{L}\p{N}],?)', regex_U)
 
     def _global(self, information, carry=None, extra=None):
         try:
