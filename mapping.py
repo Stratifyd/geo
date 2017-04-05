@@ -541,7 +541,7 @@ class CentroidUpdateHelper(object):
         return country, region
 
     def codify(self, latitude=None, longitude=None, country_strings=(),
-               region_strings=(), verbose=False, limit=100, **ignored):
+               region_strings=(), verbose=False, limit=5, **ignored):
         try:
             latitude = float(latitude)
             assert(-90.0 <= latitude <= 90.0)
@@ -583,15 +583,18 @@ class CentroidUpdateHelper(object):
         comparisons = 0
 
         if latitude is not None and longitude is not None:
-            found = 0
             nnode = None
             point = Point(longitude, latitude)
+            found = set()
             for node in self.__geo_tree.find_approximate_nearest(
                     latitude, longitude):
-                found += 1
 
                 ccode = node.ccode
                 rcode = node.rcode
+
+                if ccode in found:
+                    continue
+                found.add(ccode)
 
                 country = self._country_geocode[ccode]
                 region = self._region_geocode[ccode][rcode] if rcode else None
@@ -608,12 +611,30 @@ class CentroidUpdateHelper(object):
                             print self.translate(country_code, region_code)
                             print
                         break
+
+                if country_code is None and region_code is None:
+                    for ocode in self._region_geocode[ccode]:
+                        if ocode == rcode:
+                            continue
+                        region = self._region_geocode[ccode][ocode]
+                        comparisons += 1
+                        if contains(region, point):
+                            country_code = ccode
+                            region_code = ocode
+                            if verbose:
+                                print u'GeoCode determined by fallback.'
+                                print u'Time: %f seconds.' % (time() - runtime)
+                                print u'Comp: %d polygons.' % comparisons
+                                print self.translate(country_code, region_code)
+                                print
+                            break
+
                 if nnode is None:
                     comparisons += 1
                     if contains(country, point):
                         nnode = node
 
-                if found > limit:
+                if len(found) > limit:
                     break
 
             if country_code is None and nnode is not None:

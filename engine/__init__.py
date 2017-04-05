@@ -417,18 +417,58 @@ class Piston(object):
     NS = frozenset(NS.findall(u''.join(unichr(i) for i in xrange(maxunicode))))
     # Hardcoded geo-string replacement values.
     HC = {
-        # u'\u5176\u4ed6': u'\u5176\u4ed6\u7701',
-        # u'\u56db\u5ddd': u'\u56db\u5ddd\u7701',
-        # u'\u5c71\u4e1c': u'\u5c71\u4e1c\u7701',
-        # u'\u5c71\u897f': u'\u5c71\u897f\u7701',
-        # u'\u5e7f\u4e1c': u'\u5e7f\u4e1c\u7701',
-        # u'\u6c5f\u897f': u'\u6c5f\u897f\u7701',
-        # u'\u6cb3\u5317': u'\u6cb3\u5317\u7701',
-        # u'\u6cb3\u5357': u'\u6cb3\u5357\u7701',
-        # u'\u6d77\u5916': u'\u6d77\u5916\u7701',
-        # u'\u9655\u897f': u'\u9655\u897f\u7701',
-        # u'\u9752\u6d77': u'\u9752\u6d77\u7701',
+
     }
+    HC.update({  # Chinese main provinces
+        province: province + u'\u7701'
+        for province in {
+            u'\u6cb3\u5317',
+            u'\u5c71\u897f',
+            u'\u8fbd\u5b81',
+            u'\u5409\u6797',
+            u'\u9ed1\u9f99\u6c5f',
+            u'\u6c5f\u82cf',
+            u'\u6d59\u6c5f',
+            u'\u5b89\u5fbd',
+            u'\u798f\u5efa',
+            u'\u6c5f\u897f',
+            u'\u5c71\u4e1c',
+            u'\u6cb3\u5357',
+            u'\u6e56\u5317',
+            u'\u6e56\u5357',
+            u'\u5e7f\u4e1c',
+            u'\u6d77\u5357',
+            u'\u56db\u5ddd',
+            u'\u8d35\u5dde',
+            u'\u4e91\u5357',
+            u'\u9655\u897f',
+            u'\u7518\u8083',
+            u'\u9752\u6d77',
+            u'\u53f0\u6e7e',
+        }})
+    HC.update({  # Chinese major cities
+        city: city + u'\u5e02'
+        for city in {
+            u'\u5317\u4eac',
+            u'\u5929\u6d25',
+            u'\u4e0a\u6d77',
+            u'\u91cd\u5e86',
+        }})
+    HC.update({  # Chinese autonomous regions
+        auto: auto + u'\u81ea\u6cbb\u533a'
+        for auto in {
+            u'\u5167\u8499\u53e4',
+            u'\u5e7f\u897f\u58ee',
+            u'\u897f\u85cf',
+            u'\u5b81\u590f\u56de\u65cf',
+            u'\u65b0\u7586\u7ef4\u543e\u5c14',
+        }})
+    HC.update({  # Chinese "Special" administrative regions
+        spec: spec + u'\u7279\u522b\u884c\u653f\u533a'
+        for spec in {
+            # u'\u9999\u6e2f', # This is Hong Kong
+            u'\u6fb3\u95e8',
+        }})
 
     def remap_documents(self, document, mapping):
         information = {field_type: [] for field_type in mapping.values()}
