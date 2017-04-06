@@ -34,6 +34,7 @@ from pymongo.collection import Collection
 from requests import get as r_get
 from sh import Command
 from ta_common.field_names import RO, MC
+from ta_common.geo import Point, create_from_geojson, centroid, contains
 from ta_common.geo.mapping import (
     countries as COUNTRY_MAPPING, regions as REGION_MAPPING,
     phone_codes as PHONE_MAPPING, postal_codes as POSTAL_MAPPING)
@@ -75,52 +76,6 @@ try:
             self.__map[key] = val
 except:
     FuzzyMapping = None
-
-try:
-    from osgeo.ogr import CreateGeometryFromJson, Geometry, wkbPoint
-
-    def Point(longitude, latitude, altitude=0.0):
-        point = Geometry(wkbPoint)
-        point.AddPoint(longitude, latitude, altitude)
-        return point
-
-    def create_from_geojson(dictionary):
-        return CreateGeometryFromJson(dumps(dictionary))
-
-    def distance(geo, other):
-        return geo.Distance(other)
-
-    def contains(geo, other):
-        return not geo.Disjoint(other)
-
-    def transform_to_geojson(geo):
-        return geo.ExportToJson()
-
-    def centroid(geo):
-        return geo.Centroid().GetPoint()[:2][::-1]
-except:
-    gdal_error = format_exc()
-    try:
-        from shapely.geometry import shape, mapping, Point
-
-        def create_from_geojson(dictionary):
-            return shape(dictionary)
-
-        def contains(geo, other):
-            return geo.contains(other)
-
-        def distance(geo, other):
-            return geo.distance(other)
-
-        def transform_to_geojson(geo):
-            return mapping(geo)
-
-        def centroid(geo):
-            return shape(geo).centroid.coords[0][::-1]
-    except:
-        raise ImportError(
-            u"GeoMapping object failed to instantiate;\nGDAL: %s\n\nShapely: %s"
-            % (gdal_error, format_exc()))
 
 
 class CentroidUpdateHelper(object):
