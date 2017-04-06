@@ -432,8 +432,8 @@ class Piston(object):
             u'\u5b89\u5fbd',
             u'\u798f\u5efa',
             u'\u6c5f\u897f',
-            u'\u5c71\u4e1c',
             u'\u6cb3\u5357',
+            u'\u5c71\u4e1c',
             u'\u6e56\u5317',
             u'\u6e56\u5357',
             u'\u5e7f\u4e1c',
@@ -441,11 +441,12 @@ class Piston(object):
             u'\u56db\u5ddd',
             u'\u8d35\u5dde',
             u'\u4e91\u5357',
-            u'\u9655\u897f',
             u'\u7518\u8083',
             u'\u9752\u6d77',
             u'\u53f0\u6e7e',
         }})
+    HC[u'\u9655\u897f'] = HC[u'\u9655\u897f\u7701'] = "Shaanxi"  # HATE
+    HC[u'\u5c71\u897f'] = HC[u'\u5c71\u897f\u7701'] = "Shanxi"  # HAATE
     HC.update({  # Chinese major cities
         city: city + u'\u5e02'
         for city in {

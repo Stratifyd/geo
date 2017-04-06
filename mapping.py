@@ -413,10 +413,12 @@ class CentroidUpdateHelper(object):
         gtime = time()
         if self._country_geocode and self._region_geocode:
             self.__geo_tree = GeoTree()
-            for ccode in self._country_geocode.iterkeys():
-                for rcode, rpoly in self._region_geocode[ccode].iteritems():
-                    self.__geo_tree.insert(
-                        *centroid(rpoly), ccode=ccode, rcode=rcode)
+            for ccode, cpoly in self._country_geocode.iteritems():
+                self.__geo_tree.insert(*centroid(cpoly),
+                                       ccode=ccode, rcode=None)
+                # for rcode, rpoly in self._region_geocode[ccode].iteritems():
+                #     self.__geo_tree.insert(
+                #         *centroid(rpoly), ccode=ccode, rcode=rcode)
         gtime = time() - gtime
 
         if verbose:
@@ -554,7 +556,7 @@ class CentroidUpdateHelper(object):
                 country = self._country_geocode[ccode]
                 region = self._region_geocode[ccode][rcode] if rcode else None
 
-                if region:
+                if region:  # Guaranteed to be 'None' until Haversine is fixed.
                     comparisons += 1
                     if contains(region, point):
                         country_code = ccode
@@ -567,7 +569,7 @@ class CentroidUpdateHelper(object):
                             print
                         break
 
-                if country_code is None and region_code is None:
+                if ccode is not None and rcode is None:
                     for ocode in self._region_geocode[ccode]:
                         if ocode == rcode:
                             continue
