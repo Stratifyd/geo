@@ -34,10 +34,10 @@ from pymongo.collection import Collection
 from requests import get as r_get
 from sh import Command
 from ta_common.field_names import RO, MC
-from ta_common.geo import Point, create_from_geojson, centroid, contains
 from ta_common.geo.mapping import (
     countries as COUNTRY_MAPPING, regions as REGION_MAPPING,
     phone_codes as PHONE_MAPPING, postal_codes as POSTAL_MAPPING)
+from ta_common.geo.objects import Point, create_from_geojson, centroid, contains
 from ta_common.mango.relational_object import mutabledotdict
 from time import time
 from traceback import format_exc

@@ -364,7 +364,7 @@ if __name__ == '__main__':
             run('rerun_job(nom, job, grove, verbose=False)', sort='tottime')
             print
         elif 'r' in run_type:  # re-run geo for job
-            print "Rerunning:"
+            print "Rerunning:", subdomain, job._id, job.fid
             rerun_job(nom, job, grove)
             job['meta.contains.geo'] = True
             job.push_changes(grove[subdomain], quiet=True, upsert=True)
