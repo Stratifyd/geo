@@ -345,7 +345,7 @@ class RedBlackNode(object):
             self.__attributes = None
 
     def __getattr__(self, attr):
-        if self.__attributes is not None:
+        if self.__attributes is not None and attr in self.__attributes:
             return self.__attributes[attr]
         raise AttributeError(
             "'RedBlackNode' object has no attribute '%s'" % attr)
@@ -680,6 +680,9 @@ class GeoTree(object):
 
     def __init__(self):
         self.__tree = RedBlackTree()
+
+    def __iter__(self):
+        return iter(self.__tree)
 
     def __len__(self):
         return len(self.__tree)
