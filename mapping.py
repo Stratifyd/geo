@@ -37,7 +37,7 @@ from ta_common.field_names import RO, MC
 from ta_common.geo.mapping import (
     countries as COUNTRY_MAPPING, regions as REGION_MAPPING,
     phone_codes as PHONE_MAPPING, postal_codes as POSTAL_MAPPING)
-from ta_common.geo.objects import Point, create_from_geojson, centroid, contains
+from ta_common.geo.objects import Point, create_from_geojson, centroid, contains, distance
 from ta_common.mango.relational_object import mutabledotdict
 from time import time
 from traceback import format_exc
@@ -411,14 +411,26 @@ class CentroidUpdateHelper(object):
             self._fuzzy_treshold = 0.7
 
         gtime = time()
-        if self._country_geocode and self._region_geocode:
-            self.__geo_tree = GeoTree()
+        if self._country_geocode:
+            self.__country_tree = GeoTree()
             for ccode, cpoly in self._country_geocode.iteritems():
-                self.__geo_tree.insert(*centroid(cpoly),
-                                       ccode=ccode, rcode=None)
-                # for rcode, rpoly in self._region_geocode[ccode].iteritems():
-                #     self.__geo_tree.insert(
-                #         *centroid(rpoly), ccode=ccode, rcode=rcode)
+                latitude, longitude = centroid(cpoly)
+                self.__country_tree.insert(latitude, longitude, ccode=ccode)
+        else:
+            self.__country_tree = None
+
+        if self._country_geocode and self._region_geocode:
+            self.__region_trees = {}
+            for ccode in self._country_geocode:
+                if not self._region_geocode.get(ccode):
+                    continue
+                self.__region_trees[ccode] = GeoTree()
+                for rcode, rpoly in self._region_geocode[ccode].iteritems():
+                    latitude, longitude = centroid(rpoly)
+                    self.__region_trees[ccode].insert(
+                        latitude, longitude, ccode=ccode, rcode=rcode)
+        else:
+            self.__region_trees = {}
         gtime = time() - gtime
 
         if verbose:
@@ -493,8 +505,8 @@ class CentroidUpdateHelper(object):
 
     @staticmethod
     def translate(country, region=None):
-        region = REGION_MAPPING.get(country, {}).get(region, None)
-        country = COUNTRY_MAPPING.get(country, None)
+        region = REGION_MAPPING.get(country, {}).get(region, '<no region>')
+        country = COUNTRY_MAPPING.get(country, '<no country>')
         return country, region
 
     def codify(self, latitude=None, longitude=None, country_strings=(),
@@ -525,7 +537,7 @@ class CentroidUpdateHelper(object):
             region_strings = ()
 
         if verbose:
-            if latitude and longitude:
+            if latitude is not None and longitude is not None:
                 print u'Lat / Lon: %+08.3f / %+08.3f' % (latitude, longitude)
             else:
                 print u'Lat / Lon:   None   /   None  '
@@ -537,70 +549,82 @@ class CentroidUpdateHelper(object):
 
         if verbose:
             runtime = time()
-        comparisons = 0
+        contains_calls = 0
+        distance_calls = 0
 
-        if latitude is not None and longitude is not None:
-            nnode = None
+        if (self.__country_tree is not None and
+                latitude is not None and longitude is not None):
+            ndist = nnode = None
             point = Point(longitude, latitude)
-            found = set()
-            for node in self.__geo_tree.find_approximate_nearest(
+            for cnode in self.__country_tree.find_approximate_nearest(
                     latitude, longitude):
 
-                ccode = node.ccode
-                rcode = node.rcode
+                ccode = cnode.ccode
+                cpoly = self._country_geocode[ccode]
 
-                if ccode in found:
-                    continue
-                found.add(ccode)
+                contains_calls += 1
+                if contains(cpoly, point):
+                    if ccode in self.__region_trees:
+                        ctree = self.__region_trees[ccode]
+                        for rnode in ctree.find_approximate_nearest(
+                                latitude, longitude):
+                            if rnode.ccode != ccode:
+                                continue
+                            rcode = rnode.rcode
 
-                country = self._country_geocode[ccode]
-                region = self._region_geocode[ccode][rcode] if rcode else None
+                            if rcode not in self._region_geocode[ccode]:
+                                continue
+                            rpoly = self._region_geocode[ccode][rcode]
 
-                if region:  # Guaranteed to be 'None' until Haversine is fixed.
-                    comparisons += 1
-                    if contains(region, point):
+                            contains_calls += 1
+                            if contains(rpoly, point):
+                                country_code = ccode
+                                region_code = rcode
+                                break
+
+                        if region_code is None:
+                            for rnode in self.__region_trees[ccode]:
+                                distance_calls += 1
+                                if nnode is None:
+                                    ndist = distance(rpoly, point)
+                                    nnode = rnode
+                                else:
+                                    rdist = distance(rpoly, point)
+                                    if rdist < ndist:
+                                        ndist = rdist
+                                        nnode = rnode
+                    else:
                         country_code = ccode
-                        region_code = rcode
-                        if verbose:
-                            print u'GeoCode determined by intersection.'
-                            print u'Time: %f seconds.' % (time() - runtime)
-                            print u'Comp: %d polygons.' % comparisons
-                            print self.translate(country_code, region_code)
-                            print
-                        break
+                        region_code = None
+                else:
+                    distance_calls += 1
+                    if nnode is None:
+                        ndist = distance(cpoly, point)
+                        nnode = cnode
+                    else:
+                        cdist = distance(cpoly, point)
+                        if cdist < ndist:
+                            ndist = cdist
+                            nnode = cnode
 
-                if ccode is not None and rcode is None:
-                    for ocode in self._region_geocode[ccode]:
-                        if ocode == rcode:
-                            continue
-                        region = self._region_geocode[ccode][ocode]
-                        comparisons += 1
-                        if contains(region, point):
-                            country_code = ccode
-                            region_code = ocode
-                            if verbose:
-                                print u'GeoCode determined by fallback.'
-                                print u'Time: %f seconds.' % (time() - runtime)
-                                print u'Comp: %d polygons.' % comparisons
-                                print self.translate(country_code, region_code)
-                                print
-                            break
-
-                if nnode is None:
-                    comparisons += 1
-                    if contains(country, point):
-                        nnode = node
-
-                if len(found) > limit:
+                if country_code is not None:
+                    if verbose:
+                        print u'GeoCode determined by intersection.'
+                        print u'Time: %f seconds.' % (time() - runtime)
+                        print u'Cont: %d polygons.' % contains_calls
+                        print u'Dist: %d polygons.' % distance_calls
+                        print self.translate(country_code, region_code)
+                        print
                     break
 
             if country_code is None and nnode is not None:
                 country_code = nnode.ccode
-                region_code = nnode.rcode
+                region_code = getattr(nnode, 'rcode', None)
                 if verbose:
                     print u'GeoCode determined by proximity.'
                     print u'Time: %f seconds.' % (time() - runtime)
-                    print u'Comp: %d polygons.' % comparisons
+                    print u'Cont: %d polygons.' % contains_calls
+                    print u'Dist: %d polygons.' % distance_calls
                     print self.translate(country_code, region_code)
                     print
 
@@ -610,23 +634,78 @@ class CentroidUpdateHelper(object):
                 any(country_strings) or any(region_strings))):
             best_conf = self._fuzzy_treshold
             for country in country_strings:
-                comparisons += 1
                 _, code, conf = self._country_fuzzies.get_stored_tuple(country)
                 if conf > best_conf:
                     country_code, region_code = code, None
             for region in region_strings:
-                comparisons += 1
                 _, tup_, conf = self._region_fuzzies.get_stored_tuple(region)
                 if conf > best_conf:
                     country_code, region_code = tup_
             if verbose:
                 print u'GeoCode determined by fuzzy set comparison.'
                 print u'Time: %f seconds.' % (time() - runtime)
-                print u'Comp: %d polygons.' % comparisons
+                print u'Cont: %d polygons.' % contains_calls
+                print u'Dist: %d polygons.' % distance_calls
                 print self.translate(country_code, region_code)
                 print
 
         return country_code, region_code
+
+    def unittest(self, verbose=False, invalid=True):
+        from ta_common.geo.centroid import (countries as UNIT_TEST_C,
+                                            regions as UNIT_TEST_R)
+        UNIT_TEST_MAP = {}
+        for ccode in UNIT_TEST_C:
+            if UNIT_TEST_R.get(ccode):
+                UNIT_TEST_MAP[ccode] = UNIT_TEST_R[ccode]
+            else:
+                UNIT_TEST_MAP[ccode] = {None: UNIT_TEST_C[ccode]}
+
+        start = time()
+        score = total = 0
+        missed = {}
+        for valid_ccode in UNIT_TEST_MAP:
+            for valid_rcode, (longitude, latitude) in (
+                    UNIT_TEST_MAP[valid_ccode].iteritems()):
+                total += 1
+                found_ccode, found_rcode = self.codify(latitude, longitude)
+                valid = ', '.join(self.translate(valid_ccode, valid_rcode))
+                found = ', '.join(self.translate(found_ccode, found_rcode))
+
+                if valid_ccode != found_ccode:
+                    if invalid:
+                        print("[C] [%9.3f] Invalid result for '%s' (Got '%s')."
+                              % (time() - start, valid, found))
+                    missed.setdefault(valid_ccode, []).append(found_ccode)
+                elif valid_rcode != found_rcode:
+                    if invalid:
+                        print("[R] [%9.3f] Invalid result for '%s' (Got '%s')."
+                              % (time() - start, valid, found))
+                    missed.setdefault(valid_ccode, []).append(found_ccode)
+                else:
+                    if verbose:
+                        print("[ ] [%9.3f] Valid result for %s."
+                              % (time() - start, valid))
+                    score += 1
+
+        print("    [%9.3f] Test completed, success rate of %.3f%% (%d / %d)."
+              % (time() - start, 100.0 * float(score) / total, score, total))
+        if invalid:
+            for ccode, confused in sorted(
+                    missed.items(), key=lambda tup: len(tup[1])):
+                country = self.translate(ccode)[0]
+
+                confusion = {}
+                for ocode in confused:
+                    confusion[ocode] = confusion.get(ocode, 0) + 1
+
+                confusion = ['%s: %d' % (self.translate(ocode)[0],
+                                         confusion[ocode])
+                             for ocode in sorted(confusion,
+                                                 key=confusion.__getitem__,
+                                                 reverse=True)]
+                print("[%3d] %s => {%s}"
+                      % (len(confused), country, ', '.join(confusion)))
 
 
 if __name__ == '__main__':
