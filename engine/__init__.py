@@ -225,7 +225,7 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                                  % format_exc())
                 self.__result = []
 
-            if self._print and (self.__calls + 1) == self.MAXIMUM_ATTEMPTS:
+            if self._debug and (self.__calls + 1) == self.MAXIMUM_ATTEMPTS:
                 stdout.write("\nQuery exhausted all attempts [%s]: %s\n"
                              % (current_thread().ident, self._query))
         if isinstance(self.__result, list) and len(self.__result) > 0:
@@ -564,7 +564,7 @@ class Piston(object):
             carry, extra = self.__clean_carry_and_extra(carry, extra)
             global_ = u' '.join(
                 match.group() for match in self.CN.finditer(
-                    information.get('global', u'')))
+                    information.get('global', u''))).strip()
             if global_:
                 carry['country'] = global_
                 extra = (global_,) + extra
@@ -577,7 +577,7 @@ class Piston(object):
             carry, extra = self.__clean_carry_and_extra(carry, extra)
             subglobal_ = u' '.join(
                 match.group() for match in self.CN.finditer(
-                    information.get('subglobal', u'')))
+                    information.get('subglobal', u''))).strip()
             if subglobal_:
                 carry['state'] = subglobal_
                 extra = (subglobal_,) + extra
@@ -590,7 +590,7 @@ class Piston(object):
             carry, extra = self.__clean_carry_and_extra(carry, extra)
             local_ = u' '.join(
                 match.group() for match in self.CN.finditer(
-                    information.get('local', u'')))
+                    information.get('local', u''))).strip()
             if local_:
                 carry['city'] = local_
                 extra = (local_,) + extra
@@ -603,7 +603,7 @@ class Piston(object):
             carry, extra = self.__clean_carry_and_extra(carry, extra)
             sublocal_ = u' '.join(
                 match.group() for match in self.CN.finditer(
-                    information.get('sublocal', u'')))
+                    information.get('sublocal', u''))).strip()
             if sublocal_:
                 carry['street'] = sublocal_
                 extra = (sublocal_,) + extra
@@ -616,7 +616,7 @@ class Piston(object):
             carry, extra = self.__clean_carry_and_extra(carry, extra)
             postcode = u' '.join(
                 match.group() for match in self.CN.finditer(
-                    information.get('postcode', u'')))
+                    information.get('postcode', u''))).strip()
             if postcode:
                 carry['postalcode'] = postcode
             return self._unknown(information, carry, extra)
@@ -628,7 +628,7 @@ class Piston(object):
             carry, extra = self.__clean_carry_and_extra(carry, extra)
             unknown = u' '.join(
                 match.group() for match in self.CN.finditer(
-                    information.get('unknown', u'')))
+                    information.get('unknown', u''))).strip()
             if unknown:
                 extra = (unknown,) + extra
             if extra:
@@ -704,7 +704,7 @@ class Piston(object):
         for _ in self.iterprocess(config, subdomain, pool_size, verbose):
             pass
 
-    def report_status(self, locked, runtime):
+    def _report_status_oneline(self, locked, runtime):
         stdout.write(
             "[% 9.3f] %d hits / %d misses / %d calls <--> "
             "%d coded (nom) / %d coded (idf) / %d empty <--> "
@@ -725,6 +725,31 @@ class Piston(object):
 
                 locked))
         stdout.flush()
+
+    def _report_status_compact(self, locked, runtime):
+        stdout.write(
+            "[% 9.3f] %d in iterlock (%d processed, %.3f per second)\n"
+            "     Cache: %d hits / %d misses\n"
+            "    Result: %d results -> %d codified\n"
+            "   Network: %d calls (sleeping for %04.2f seconds)\n" % (
+                time() - runtime,
+                locked,
+                self.HITS.value + self.MISS.value + self.FAIL.value,
+                float(self.HITS.value + self.MISS.value) / (time() - runtime),
+
+                self.HITS.value,
+                self.MISS.value,
+
+                self.CODE.value,
+                self.FUZZ.value,
+
+                self.CONT.value,
+                self.__sleep.value,
+            ))
+        stdout.flush()
+
+    def report_status(self, locked, runtime):
+        return self._report_status_compact(locked, runtime)
 
     def iterprocess(self, config, subdomain=None, pool_size=4, verbose=False):
         if verbose:
@@ -769,7 +794,7 @@ class Piston(object):
             # for _id, geo, err in imap(self.__process, locked):
             locked -= 1
             self.__processed.value += 1
-            if verbose and (time() - last) > 1.0:
+            if verbose and (time() - last) > 5.0:
                 self.report_status(len(locked), runtime)
                 last = time()
             if not _id or err is not None:
@@ -815,7 +840,7 @@ class Piston(object):
                       cache=self.__cache,
                       search_type=type_,
                       verbose=True,
-                      _debug=False,
+                      debug=False,
                       _fetch_function=self.session_fetch_function,
                       _catch_exceptions=(ConnectionError, Timeout),
                       _sleep=self.__sleep)
@@ -869,28 +894,6 @@ class Piston(object):
 
 
 class Engine(object):
-
-    def report_status(self, overall_runtime):
-        hits, miss, cont, code, fuzz, null, fail = (
-            state / len(self) for state in map(
-                sum, zip(piston.state for piston in self)))
-        stdout.write("[% 9.3f] %d hits / %d misses / %d calls <--> "
-                     "%d coded (nom) / %d coded (idf) / %d empty <--> "
-                     "%04.2f sleep / %03.2f codes / %d total\r" % (
-                         time() - overall_runtime,
-
-                         hits,
-                         miss,
-                         miss + cont,
-
-                         code,
-                         fuzz,
-                         null,
-
-                         self.__sleep.value,
-                         float(hits + miss) / (time() - overall_runtime),
-                         hits + miss + fail))
-        stdout.flush()
 
     @property
     def processed(self):
