@@ -167,7 +167,7 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                         with self._sleep.get_lock():
                             self._sleep.value = max(
                                 self._minimum,
-                                self._sleep.value * 0.999)
+                                self._sleep.value * 0.99)
                     except self.exc as err:
                         self.__calls -= 1
                         docs = None
@@ -204,6 +204,7 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                     else:
                         if self._cache:
                             mirror.add(key)
+                        sleep(self._sleep.value)
                 except:
                     self.__calls += 1
                     if self._print:

@@ -113,7 +113,7 @@ class NominatimMixin(object):
     @classmethod
     def get_geocode(cls, query, attempt=0, juggle=False):
         for value in query.itervalues():
-            substrings = value.lower().split()
+            substrings = list(filter(None, value.lower().strip().split()))
             if len(substrings) > 2:
                 continue
             for substring in substrings:
