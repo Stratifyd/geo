@@ -214,9 +214,7 @@ if __name__ == '__main__':
                 table.append((
                     geo,
                     doc["_count"],
-                    u", ".join(filter(None, (doc["_id"].get(field).strip()
-                                             for field in fields))
-                               ) or "<no input>",
+                    {field: doc["_id"].get(field).strip() for field in fields},
                     u" | ".join(filter(None, doc["_found"])) or "<no location>")
                 )
             else:
