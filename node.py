@@ -49,7 +49,7 @@ class GeoLookup(ProcessNode):
         self.engine = Piston.spark(client=self.mongo_helper,
                                    configuration=self.taste_conf)
         print "Initialization required %f seconds." % (time() - start)
-        print "Geocoding against %s." % self.taste_conf.getNominatimHost()
+        print "Geocoding against %s." % self.taste_conf.getNominatimURI()
 
     def define_aws_queues(self):
         return [self.taste_conf.getTier3GeoSQSQueue(),

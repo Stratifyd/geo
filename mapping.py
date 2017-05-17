@@ -37,7 +37,8 @@ from ta_common.field_names import RO, MC
 from ta_common.geo.mapping import (
     countries as COUNTRY_MAPPING, regions as REGION_MAPPING,
     phone_codes as PHONE_MAPPING, postal_codes as POSTAL_MAPPING)
-from ta_common.geo.objects import Point, create_from_geojson, centroid, contains, distance
+from ta_common.geo.objects import (
+    Point, create_from_geojson, centroid, contains, distance)
 from ta_common.mango.relational_object import mutabledotdict
 from time import time
 from traceback import format_exc
@@ -710,5 +711,5 @@ class CentroidUpdateHelper(object):
 
 if __name__ == '__main__':
     from ta_common.taste_config_helper import TasteConf
-    nominatim_host = u'http://%s/nominatim/' % TasteConf().getNominatimHost()
+    nominatim_host = u'http://%s/nominatim/' % TasteConf().getNominatimURI()
     CentroidUpdateHelper.generate_full_geocode_set(nominatim_host, True)

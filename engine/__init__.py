@@ -377,7 +377,7 @@ class Piston(object):
                 if country_geocode and region_geocode and phone_geocode:
                     break
         else:
-            nominatim_host = nominatim_host or configuration.getNominatimHost()
+            nominatim_host = nominatim_host or configuration.getNominatimURI()
             country_geocode = configuration.getNominatimCountryGeoJSON()
             region_geocode = configuration.getNominatimRegionGeoJSON()
             phone_geocode = configuration.getNominatimPhoneGeoJSON()
