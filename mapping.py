@@ -585,6 +585,8 @@ class CentroidUpdateHelper(object):
 
                         if region_code is None:
                             for rnode in self.__region_trees[ccode]:
+                                rcode = rnode.rcode
+                                rpoly = self._region_geocode[ccode][rcode]
                                 distance_calls += 1
                                 if nnode is None:
                                     ndist = distance(rpoly, point)
@@ -594,6 +596,8 @@ class CentroidUpdateHelper(object):
                                     if rdist < ndist:
                                         ndist = rdist
                                         nnode = rnode
+                        else:
+                            break
                     else:
                         country_code = ccode
                         region_code = None
