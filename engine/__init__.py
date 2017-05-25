@@ -177,8 +177,9 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                         else:
                             errors.add(type(err))
                         if self._print:
-                            stdout.write("\nEncountered expected %s error.\n%s"
-                                         % (self._type, format_exc()))
+                            stdout.write(
+                                "\nEncountered expected %s error on %s.\n%s"
+                                % (self._type, query, format_exc()))
                         with self._sleep.get_lock():
                             self._sleep.value = min(
                                 self._maximum,
@@ -190,8 +191,9 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                                 self._maximum,
                                 max(self._sleep.value, 0.05) * 2.5)
                         if self._print:
-                            stdout.write("\nEncountered unknown %s error!\n%s"
-                                         % (self._type, format_exc()))
+                            stdout.write(
+                                "\nEncountered unknown %s error on %s!\n%s"
+                                % (self._type, query, format_exc()))
                         docs = None
                         sleep(self._sleep.value)
                     if docs:
