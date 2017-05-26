@@ -24,7 +24,7 @@
 
 from collections import Container
 from helpers import GeoTree
-from json import load, loads, dump, dumps
+from json import load, loads, dump
 from math import ceil, log10
 from operator import itemgetter
 from os import remove
@@ -33,12 +33,12 @@ from pymongo import CursorType
 from pymongo.collection import Collection
 from requests import get as r_get
 from sh import Command
-from ta_common.field_names import RO, MC
+from ta_common.field_names import RO, MC, ENV
 from ta_common.geo.mapping import (
     countries as COUNTRY_MAPPING, regions as REGION_MAPPING,
     phone_codes as PHONE_MAPPING, postal_codes as POSTAL_MAPPING)
 from ta_common.geo.objects import (
-    Point, create_from_geojson, centroid, contains, distance)
+    Point, create_from_geojson, centroid, contains, distance, union)
 from ta_common.mango.relational_object import mutabledotdict
 from time import time
 from traceback import format_exc
@@ -410,6 +410,17 @@ class CentroidUpdateHelper(object):
             self._fuzzy_treshold = _fuzzy_treshold
         else:
             self._fuzzy_treshold = 0.7
+
+        if ENV.get(ENV.STAGE, as_type=str).lower().startswith('china'):
+            if self._country_geocode:
+                for remove, replace in (
+                        ("HKG", "CH06"), ("TWN", "CH27"), ("MAC", "CH34")):
+                    poly = self._country_geocode.pop(remove, None)
+                    self._country_geocode['CHN'] = union(
+                        self._country_geocode['CHN'], poly)
+                    if self._region_geocode:
+                        _ = self._region_geocode.pop(remove, None)
+                        self._region_geocode['CHN'][replace] = poly
 
         gtime = time()
         if self._country_geocode:
