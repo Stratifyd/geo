@@ -323,7 +323,7 @@ if __name__ == '__main__':
     job = Jobs.fetch(grove[subdomain],
                      fid=job_info, current=True, _protected=False)
     job = job or Jobs.fetch(grove[subdomain],
-                            _id=job_info, current=True, _protected=False)
+                            _id=job_info, _protected=False)
 
     if 'p' in run_type:  # print JSON-encoded job config
         print job.to_json(for_aws=True)
