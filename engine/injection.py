@@ -68,7 +68,7 @@ class NominatimMixin(object):
             ('street',),
         )))
     BLACKLIST_PHRASES = frozenset([
-        "other", "n/a", "none", "unknown", "nowhere",
+        "other", "n/a", "none", "unknown", "nowhere", "null",
         u'\u6d77\u5916', u'\u5176\u4ed6', u'\u5176\u5b83'])
     __slots__ = ()  # This class simply stores methods, no __dict__ needed.
 

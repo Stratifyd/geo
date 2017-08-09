@@ -10,7 +10,7 @@ from os.path import join
 from pymongo import MongoClient, DESCENDING
 from pymongo.cursor import CursorType
 from regex import compile as regex_compile, UNICODE as regex_U
-from requests import session, get as r_get
+from requests import Session, get as r_get
 from requests.adapters import HTTPAdapter
 from requests.exceptions import ConnectionError, Timeout
 from sys import stdout, maxunicode
@@ -20,7 +20,7 @@ from ta_common.geo.mapping import (
     countries as country_names, regions as region_names, phone_codes)
 from ta_common.text_tools.tokenizer import LanguageTokenizer
 from threading import current_thread
-from time import time, sleep
+from time import ctime, time, sleep
 from traceback import format_exc
 from unicodedata import normalize
 from urllib import urlencode
@@ -172,7 +172,7 @@ class Stroke(NominatimMixin, MaxmindMixin, PhoneNumberMixin):
                         self.__calls -= 1
                         docs = None
                         if type(err) in errors:
-                            self.__calls += 1
+                            self.__calls += 2
                             errors.remove(type(err))
                         else:
                             errors.add(type(err))
@@ -645,6 +645,16 @@ class Piston(object):
         except:
             return None
 
+    @staticmethod
+    def spawn_session(namespace, concurrency=4):
+        session = Session()
+        session.mount(prefix=namespace,
+                      adapter=HTTPAdapter(pool_connections=concurrency,
+                                          pool_maxsize=concurrency * 2,
+                                          max_retries=0,
+                                          pool_block=False))
+        return session
+
     def __init__(self, client, nominatim_host, **kwargs):
         if isinstance(client, MongoClient):
             self.__client = client
@@ -659,19 +669,16 @@ class Piston(object):
         self.__used = set()
         self.__cache = CacheDictionary(maxsize=kwargs.get('maxsize', 100000),
                                        weakref=False)
-        self.__session = session()
-        self.__session.mount(
-            prefix=self.__ns,
-            adapter=HTTPAdapter(pool_connections=kwargs.get('concurrent', 4),
-                                pool_maxsize=kwargs.get('concurrent', 4) * 2,
-                                pool_block=True))
+        self.__thread = kwargs.get('concurrent', 4)
+        self.__session = self.spawn_session(namespace=self.__ns,
+                                            concurrency=self.__thread)
         self.__processed = Value('i', 0, lock=False)
         self.__sleep = Value('f', 0.0, lock=True)
         self.tokenizer = LanguageTokenizer(concurrent=True)
         self.concurrent = kwargs.get('concurrent', 4)
 
     def session_fetch_function(self, url, **kwargs):
-        return self.__session.get(url, timeout=30.0, **kwargs).content
+        return self.__session.get(url, timeout=5.0, **kwargs).content
 
     def restore_from_cache(self, subdomain, limit=None):
         if isinstance(limit, int):
@@ -734,7 +741,8 @@ class Piston(object):
             "[% 9.3f] %d in iterlock (%d processed, %.3f per second)\n"
             "     Cache: %d hits / %d misses\n"
             "    Result: %d results -> %d codified\n"
-            "   Network: %d calls (sleeping for %04.2f seconds)\n" % (
+            "   Network: %d calls (sleeping for %04.2f seconds)\n"
+            " Timestamp: %s\n" % (
                 time() - runtime,
                 locked,
                 self.HITS.value + self.MISS.value + self.FAIL.value,
@@ -748,6 +756,8 @@ class Piston(object):
 
                 self.CONT.value,
                 self.__sleep.value,
+
+                ctime(),
             ))
         stdout.flush()
 
