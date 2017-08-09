@@ -310,7 +310,7 @@ if __name__ == '__main__':
     from bson import ObjectId
     from pprint import pprint
     from ta_common.mango import Grove
-    from ta_common.mango.relational_object.jobs import Jobs
+    from ta_common.relational_object.jobs import Jobs
     from ta_common.taste_config_helper import TasteConf
 
     grove = Grove.get_mango_helper(compute=True, distribution=False)
