@@ -39,7 +39,7 @@ from ta_common.geo.mapping import (
     phone_codes as PHONE_MAPPING, postal_codes as POSTAL_MAPPING)
 from ta_common.geo.objects import (
     Point, create_from_geojson, centroid, contains, distance, union)
-from ta_common.mango.relational_object import mutabledotdict
+from ta_common.relational_object import mutabledotdict
 from time import time
 from traceback import format_exc
 
