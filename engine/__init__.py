@@ -843,7 +843,71 @@ class Piston(object):
                 stdout.write("[% 9.3f] Bulk update of mongo cache complete.\n"
                              % (time() - runtime))
         yield None
+    
+    def iterprocess_streaming(self, docs, model, subdomain=None, pool_size=4, verbose=False):
+        if verbose:
+            runtime = time()
+        self.__processed = Value('i', 0, lock=True)
+        self.HITS = Value('i', 0, lock=True)
+        self.MISS = Value('i', 0, lock=True)
+        self.CONT = Value('i', 0, lock=True)
+        self.CODE = Value('i', 0, lock=True)
+        self.FUZZ = Value('i', 0, lock=True)
+        self.NULL = Value('i', 0, lock=True)
+        self.FAIL = Value('i', 0, lock=True)
 
+        
+        if subdomain:
+            if verbose:
+                stdout.write("[% 9.3f] Beginning retrieval of mongo cache...\n"
+                             % (time() - runtime))
+            self.restore_from_cache(subdomain=subdomain,
+                                    limit=10000)
+            if verbose:
+                stdout.write("[% 9.3f] Retrieval of mongo cache complete.\n"
+                             % (time() - runtime))
+        
+        self._config = self.generate_field_mapping(model)
+        pool = ThreadPool(min(max(int(pool_size), 1), self.concurrent))
+
+        #bulk = self.__client[config.mongo_db][
+        #    config.mongo_table].initialize_unordered_bulk_op()
+            
+            
+        locked = LockedIterator(docs, lock_past=self.concurrent * 2150)
+
+        if verbose:
+            self.report_status(len(locked), runtime)
+            last = time()
+
+        for _id, geo, err in pool.imap_unordered(self.__process, locked):
+            # for _id, geo, err in imap(self.__process, locked):
+            locked -= 1
+            self.__processed.value += 1
+            if verbose and (time() - last) > 5.0:
+                self.report_status(len(locked), runtime)
+                last = time()
+            if not _id or err is not None:
+                stdout.write('\n%s\n' % err)
+                #yield err
+                continue
+            yield (_id, geo)
+
+        if verbose:
+            self.report_status(len(locked), runtime)
+            stdout.write("\n[% 9.3f] Geocoding complete.\n"
+                         % (time() - runtime))
+
+        pool.close()
+        pool.join()
+
+        if verbose:
+            stdout.flush()
+            stdout.write("[% 9.3f] Subthreads joined.\n"
+                         % (time() - runtime))
+
+    
+    
     def fire(self, query, type_=None):
         if type_ is None:
             type_, query = self.remap_information(query)
