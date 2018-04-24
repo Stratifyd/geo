@@ -25,7 +25,7 @@
 from ta_common.field_names import ENV, MC, JS
 from time import time
 from v2_ta_common.process_node import ProcessNode
-from v2_tier3_compute_node.geo.engine import Engine, Piston
+from engine import Engine, Piston
 import sys
 
 

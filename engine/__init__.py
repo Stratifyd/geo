@@ -25,10 +25,10 @@ from traceback import format_exc
 from unicodedata import normalize
 from urllib import urlencode
 from urlparse import urlparse, parse_qsl
-from v2_tier3_compute_node.geo.engine.injection import (
+from engine.injection import (
     NominatimMixin, MaxmindMixin, PhoneNumberMixin)
-from v2_tier3_compute_node.geo.helpers import CacheDictionary, LockedIterator
-from v2_tier3_compute_node.geo.mapping import CentroidUpdateHelper
+from helpers import CacheDictionary, LockedIterator
+from mapping import CentroidUpdateHelper
 from warnings import warn
 
 
