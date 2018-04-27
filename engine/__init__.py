@@ -15,8 +15,8 @@ from requests.adapters import HTTPAdapter
 from requests.exceptions import ConnectionError, Timeout
 from sys import stdout, maxunicode
 from ta_common.field_names import DF, RO, MC, ENV
-from ta_common.geo.centroid import countries, regions, phones
-from ta_common.geo.mapping import (
+from data.centroid import countries, regions, phones
+from data.mapping import (
     countries as country_names, regions as region_names, phone_codes)
 from ta_common.text_tools.tokenizer import LanguageTokenizer
 from threading import current_thread
