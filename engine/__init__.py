@@ -15,8 +15,8 @@ from requests.adapters import HTTPAdapter
 from requests.exceptions import ConnectionError, Timeout
 from sys import stdout, maxunicode
 from ta_common.field_names import DF, RO, MC, ENV
-from data.centroid import countries, regions, phones
-from data.mapping import (
+from geo.data.centroid import countries, regions, phones
+from geo.data.mapping import (
     countries as country_names, regions as region_names, phone_codes)
 from ta_common.text_tools.tokenizer import LanguageTokenizer
 from threading import current_thread
@@ -25,10 +25,10 @@ from traceback import format_exc
 from unicodedata import normalize
 from urllib import urlencode
 from urlparse import urlparse, parse_qsl
-from engine.injection import (
+from geo.engine.injection import (
     NominatimMixin, MaxmindMixin, PhoneNumberMixin)
-from helpers import CacheDictionary, LockedIterator
-from mapping import CentroidUpdateHelper
+from geo.helpers import CacheDictionary, LockedIterator
+from geo.mapping import CentroidUpdateHelper
 from warnings import warn
 
 

@@ -6,8 +6,8 @@ from math import log10
 from phonenumbers import format_number, PhoneNumberMatcher
 from regex import compile as regex_compile, UNICODE as regex_U
 from sys import stdout, maxunicode
-from data.centroid import phones
-from data.mapping import phone_codes
+from geo.data.centroid import phones
+from geo.data.mapping import phone_codes
 from time import sleep
 from traceback import format_exc
 from urllib import urlencode

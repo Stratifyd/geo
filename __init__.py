@@ -21,7 +21,7 @@ from ta_common.taste_config_helper import TasteConf
 from engine.injection import MaxmindMixin
 from mapping import CentroidUpdateHelper
 
-from v2_tier3_compute_node.semi_interactive import SemiInteractiveModel, ModelWrapper
+from semi_interactive import SemiInteractiveModel, ModelWrapper
 
 
 class GeoModel(ModelWrapper):
