@@ -18,8 +18,8 @@
 """
 
 from bson.son import SON
-from geo.data.centroid import countries as kGeoCentroid
-from geo.data.mapping import (region_names as ReverseRegion,
+from data.centroid import countries as kGeoCentroid
+from data.mapping import (region_names as ReverseRegion,
                               countries as CountryReverseMap)
 from v2_ta_common.job_configuration import DefaultFields as df
 from time import time

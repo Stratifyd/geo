@@ -668,7 +668,7 @@ class CentroidUpdateHelper(object):
         return country_code, region_code
 
     def unittest(self, verbose=False, invalid=True):
-        from ta_common.geo.centroid import (countries as UNIT_TEST_C,
+        from data.centroid import (countries as UNIT_TEST_C,
                                             regions as UNIT_TEST_R)
         UNIT_TEST_MAP = {}
         for ccode in UNIT_TEST_C:
